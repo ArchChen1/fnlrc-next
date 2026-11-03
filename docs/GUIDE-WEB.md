@@ -207,7 +207,54 @@ fnlrc translate-import --from 待译.csv --root /music --write
 
 ---
 
-## 七、让新歌自动补完（监听文件夹）
+## 七、把界面换成英文（或换回来）
+
+界面文案支持**中文 / English** 两种。切换是**即时**的，不刷新页面、
+也不会打断正在跑的补完任务。
+
+1. 点右上角 **设置 ⚙**
+2. 面板最上面一项就是 **界面语言**，下拉里选 `中文` 或 `English`
+3. 选完立刻生效，页面上的按钮、表头、状态标签、报告汇总全都跟着变
+
+**它记在哪**：只记在这台**浏览器本地**（`localStorage`），不写服务器、
+不影响别人。换设备或换浏览器要重新选一次。
+
+**它不影响什么**：
+
+- **导出的数据不变**。`report.json` 和 CSV 里的状态值（`written_mono`、`lang_mismatch` 等）
+  永远是英文枚举 —— 换语言不会让昨天导出的表和今天的不一样，方便对比和排查。
+- **报告里的「原因」列不翻译**。那一列是程序给的详细中文说明（比如
+  「两个源都没有歌词」），属于数据而不是界面文案，故意保持原样，
+  这样你把它贴进 issue 时别人能搜到。
+- **服务器端默认语言不变**。如果你希望命令行输出也换语言，见下面的
+  「命令行怎么换」。
+
+### 命令行怎么换
+
+```bash
+fnlrc --lang en scan --root /music    # 这一次用英文
+export FNLRC_LANG=en                  # 这台机器以后都用英文
+fnlrc config --set lang=en            # 记进配置文件（重启后仍生效）
+```
+
+优先级：`--lang` > 环境变量 `FNLRC_LANG` > 配置文件里的 `lang` > 默认中文。
+`fnlrc -h` 的帮助文字也会跟着换。
+
+### 想加第三种语言（比如日文）
+
+词表是**每语言一个文件**，加语言不用改核心代码：
+
+- 后端：复制 `fnlrc/i18n/en.py` 成 `fnlrc/i18n/ja.py`，把值翻成日文，
+  再在 `fnlrc/i18n/__init__.py` 的 `_CATALOGS` 里加一行。
+- 前端：复制 `fnlrc/web/js/i18n/en.js` 成 `ja.js`，在
+  `fnlrc/web/js/i18n/index.js` 的 `CATALOGS` 和 `LANGS` 里各加一行。
+
+漏翻的条目**不会显示空白** —— 会回退显示英文；跑一次 `pytest tests/test_i18n.py
+tests/test_web_i18n.py` 就能一次性列出漏了哪些键。
+
+---
+
+## 八、让新歌自动补完（监听文件夹）
 
 如果你经常往 NAS 里丢新歌，与其每次手动扫描一遍，不如让工具**盯着一个目录**：
 新歌下进来就自动补完歌词，不用你动手。
@@ -258,7 +305,7 @@ fnlrc translate-import --from 待译.csv --root /music --write
 
 ---
 
-## 八、打开飞牛的 SSH
+## 九、打开飞牛的 SSH
 
 后面几节要用命令行。飞牛是 Debian 系，**SSH 默认是关着的**，先在飞牛里打开：
 
@@ -289,7 +336,7 @@ scp fnlrc/fnos.py 你的用户名@NAS的IP:/tmp/
 
 ---
 
-## 九、容器能不能访问飞牛的数据目录
+## 十、容器能不能访问飞牛的数据目录
 
 要把结果回填到飞牛，容器得能读到飞牛的**两处**数据：
 
@@ -370,7 +417,7 @@ sudo python3 /tmp/fnos.py --app-data /usr/local/apps/@appdata/trim.music --appme
 
 ---
 
-## 十、把结果回填到飞牛（进阶）
+## 十一、把结果回填到飞牛（进阶）
 
 **这一节只在你需要处理「已经在飞牛库里」的歌时才看。**
 
@@ -504,7 +551,7 @@ cp $B/lyric-*.db /vol2/@appmeta/trim.music/lyric-sqlite/
 
 ---
 
-## 十一、升级和卸载
+## 十二、升级和卸载
 
 **升级**：重新 `docker build`，然后停掉旧容器、用同样的 `docker run` 起新的。`fnlrc-data` 卷里的历史记录会保留。
 
@@ -512,7 +559,7 @@ cp $B/lyric-*.db /vol2/@appmeta/trim.music/lyric-sqlite/
 
 ---
 
-## 十二、排错
+## 十三、排错
 
 | 现象 | 原因 | 怎么办 |
 |---|---|---|

@@ -4,9 +4,14 @@
  * 三者各占一个 overlay，互不覆盖彼此的 DOM —— 早先把它们塞进同一个 sheet，
  * 结果打开「历史」会把设置表单整块替换掉，关掉之后就再也填不了 key。
  */
-import { S } from "./state.js";
+import { S, STATUS_LABEL } from "./state.js";
 import { $, $$, esc, api, toast, openOverlay, closeOverlay, fmtTime } from "./core.js";
+import { t, applyI18n, LANGS, getLang, setLang, detectLang } from "./i18n/index.js";
 import { showResults } from "./screens.js";
+
+/** 语言在**会话中**改了之后要重画的东西。由 main.js 注册（避免和 screens 循环引用）。 */
+let onLangChange = null;
+export function setLangChangeHook(fn) { onLangChange = fn; }
 
 export function initPanels() {
   $("#openSettings").addEventListener("click", openSettings);
@@ -28,6 +33,43 @@ export function initPanels() {
   $("#fnosApply").addEventListener("click", fnosApply);
   $("#watchSave").addEventListener("click", saveWatch);
   $("#watchToggle").addEventListener("click", toggleWatch);
+
+  buildLangPicker();
+}
+
+/* ─────────────────────────────────────────── 界面语言 */
+
+/** 下拉框从 LANGS 生成 —— 新增语言只要在 i18n/index.js 登记一行。 */
+function buildLangPicker() {
+  const sel = $("#cfgLang");
+  if (!sel) return;
+  sel.innerHTML = LANGS.map(([code, name]) =>
+    `<option value="${esc(code)}">${esc(name)}</option>`).join("");
+  sel.value = getLang();
+  sel.addEventListener("change", () => switchLang(sel.value));
+}
+
+/**
+ * 切换语言：换语言 → 重刷静态 DOM → 重画动态部分。
+ *
+ * 当前跑着的任务不受影响（SSE 里的 status 是枚举值，只在渲染时翻译），
+ * 所以这里不需要重启任何东西。
+ */
+export function switchLang(code) {
+  setLang(code);
+  applyI18n();
+  if (onLangChange) onLangChange();
+  // 这几处文字是 JS 写进去的，applyI18n 管不到 —— 切语言时按当前状态重写一次
+  setWatchRunning(S.watchRunning);
+  const sel = $("#cfgLang");
+  if (sel) sel.value = getLang();
+  toast(t("settings.saved"));
+}
+
+/** 启动时把语言定下来：localStorage > 浏览器 > zh。 */
+export function initLang() {
+  setLang(detectLang());
+  applyI18n();
 }
 
 /* ─────────────────────────────────────────── 回填到飞牛 */
@@ -55,7 +97,7 @@ document.addEventListener("change", e => {
     const btn = document.getElementById("fnosApply");
     if (btn) btn.disabled = true;
     const st = document.getElementById("fnosStatus");
-    if (st) st.textContent = "开关变了，请重新点一次「② 预览差异」。";
+    if (st) st.textContent = t("settings.fnos_toggle_changed");
   }
 });
 
@@ -64,15 +106,15 @@ async function fnosRun(stage) {
   const status = $("#fnosStatus");
   const paths = fnosPaths();
   if (!paths.app_data && !paths.appmeta) {
-    toast("先填飞牛的数据目录 —— 主库和分片是两处，都要填");
+    toast(t("settings.fnos_need_paths"));
     return;
   }
   const music = ($("#root").value || S.root || "").trim();
-  if (stage === "plan" && !music) { toast("先在第一屏扫描一次音乐库，我才能知道从哪儿比对"); return; }
+  if (stage === "plan" && !music) { toast(t("settings.fnos_need_music")); return; }
 
   $("#fnosApply").disabled = true;
   fnosPlan = null;
-  status.textContent = stage === "probe" ? "正在探测结构…" : "正在比对…";
+  status.textContent = stage === "probe" ? t("settings.fnos_probing") : t("settings.fnos_planning");
   out.textContent = "";
   try {
     // ① 检测只查结构，**不带音乐库路径** —— 带了就会走成"差异计划"分支
@@ -82,43 +124,39 @@ async function fnosRun(stage) {
     });
     out.textContent = d.text || d.error || "";
     if (!d.ok) {
-      status.textContent = "❌ " + (d.error || "结构对不上，先别往下走");
+      status.textContent = t("settings.fnos_bad", { msg: d.error || "structure mismatch, stop here" });
       return;
     }
     if (d.stage === "probe") {
-      status.textContent = "✅ 结构正常。接着点「② 预览差异」。";
+      status.textContent = t("settings.fnos_probe_ok");
     } else {
       // 执行时按「原地更新 + 新建」的**总数**对账，所以这里也存总数
       const ins = allowInsert() ? (d.insertable || 0) : 0;
       fnosPlan = { ...paths, music, changed: d.changed + ins };
-      const bits = [`原地改 ${d.changed} 首`];
-      if (d.insertable) {
-        bits.push(allowInsert() ? `新建 ${d.insertable} 首` : `另有 ${d.insertable} 首可新建`);
-      }
+      const bits = [`update ${d.changed}`];
+      if (d.insertable) bits.push(allowInsert() ? `insert ${d.insertable}` : `${d.insertable} insertable`);
       status.textContent = (d.changed || ins)
-        ? bits.join("、") + `（跳过 ${d.same + d.no_lrc} 首）`
-          + (d.write_enabled ? "。" : "。服务端没开启写入，第③步会被拒。")
-        : "没有需要改的，磁盘和库里已经一致。";
+        ? bits.join(", ") + ` (skip ${d.same + d.no_lrc})`
+          + (d.write_enabled ? "." : ". Write access is off on the server, step ③ will be rejected.")
+        : t("settings.fnos_nothing");
       $("#fnosApply").disabled = !((d.changed || ins) && d.write_enabled);
     }
   } catch (e) {
-    status.textContent = "❌ " + e.message;
+    status.textContent = t("settings.fnos_bad", { msg: e.message });
   }
 }
 
 async function fnosApply() {
   if (!fnosPlan || !fnosPlan.changed) return;
-  const ok = confirm(
-    `要动飞牛数据库里 ${fnosPlan.changed} 首歌的歌词。\n\n` +
-    `已有歌词的只换正文，保留 lyric_id —— 歌单、收藏、播放历史都不受影响。\n` +
-    (allowInsert() ? `没有歌词的会**新建**一条歌词记录。\n` : "") +
-    `写之前会自动备份，出问题可以从备份恢复。\n\n` +
-    `继续吗？`);
+  const ok = confirm(t("settings.fnos_confirm", {
+    n: fnosPlan.changed,
+    insert: allowInsert() ? t("settings.fnos_confirm_insert") : ""
+  }));
   if (!ok) return;
 
   const status = $("#fnosStatus");
   $("#fnosApply").disabled = true;
-  status.textContent = "正在写入…";
+  status.textContent = t("settings.fnos_writing");
   try {
     const d = await api("/api/fnos/apply", {
       app_data: fnosPlan.app_data, appmeta: fnosPlan.appmeta,
@@ -126,20 +164,19 @@ async function fnosApply() {
       allow_insert: allowInsert()
     });
     status.textContent = (d.changed || d.inserted)
-      ? `✅ 回填完成：原地改 ${d.changed} 首、新建 ${d.inserted || 0} 首。` +
-        `备份在 ${d.backup_dir}。` +
-        (d.failed.length ? ` 有 ${d.failed.length} 首失败。` : "") +
-        " 如果飞牛里没立刻变化，重启一下飞牛音乐应用。"
-      : (d.message || "没有需要改的。");
+      ? `✅ updated ${d.changed}, inserted ${d.inserted || 0}. Backup: ${d.backup_dir}.`
+        + (d.failed.length ? ` ${d.failed.length} failed.` : "")
+        + " If Feiniu doesn't change right away, restart the Feiniu Music app."
+      : (d.message || t("settings.fnos_nothing"));
     const bad = (d.insert_report || []).filter(x => x.why)
-      .map(x => `新建失败 ${x.file}\n  ${x.why}`);
+      .map(x => `${t("settings.fnos_insert_failed")} ${x.file}\n  ${x.why}`);
     if (d.failed.length || bad.length) {
       $("#fnosOut").textContent =
         bad.concat(d.failed.map(x => `${x.file}\n  ${x.why}`)).join("\n");
     }
     fnosPlan = null;
   } catch (e) {
-    status.textContent = "❌ " + e.message;
+    status.textContent = t("settings.fnos_bad", { msg: e.message });
     $("#fnosApply").disabled = false;
   }
 }
@@ -152,7 +189,7 @@ async function openSettings() {
     S.config = await api("/api/config");
     applyConfig(S.config);
   } catch (e) {
-    toast("读取配置失败：" + e.message);
+    toast(t("settings.read_failed", { err: e.message }));
   }
 }
 
@@ -166,19 +203,20 @@ function applyConfig(c) {
   $("#cfgKey").value = "";
   $("#writeResult").textContent = "";
   $("#testResult").textContent = "";
+  const langSel = $("#cfgLang");
+  if (langSel) langSel.value = getLang();
 
   const keyInput = $("#cfgKey");
   if (c.remote_locked_by_env) {
     keyInput.disabled = true;
-    keyInput.placeholder = "由环境变量提供，不能在网页里改";
-    $("#keyState").textContent =
-      "API Key 由环境变量 FNLRC_REMOTE_API_KEY 提供（优先于配置文件）。";
+    keyInput.placeholder = t("settings.key_env_ph");
+    $("#keyState").textContent = t("settings.key_env");
   } else {
     keyInput.disabled = false;
     keyInput.placeholder = "sk-…";
     $("#keyState").textContent = c.remote_configured
-      ? `已配置：${c.remote_key_masked}。留空表示不修改。`
-      : "还没配置。Key 只存在服务端，页面拿不到回显。";
+      ? t("settings.key_set", { masked: c.remote_key_masked })
+      : t("settings.key_unset");
   }
 
   const picked = $$('input[name=backend]').find(r => r.value === (c.translate || "source"));
@@ -206,9 +244,9 @@ function applyWatchConfig(w, running) {
 function setWatchRunning(running) {
   S.watchRunning = running;
   const btn = $("#watchToggle");
-  if (btn) btn.textContent = running ? "停止监听" : "开始监听";
+  if (btn) btn.textContent = running ? t("settings.watch_stop") : t("settings.watch_start");
   const st = $("#watchState");
-  if (st) st.textContent = running ? "● 正在监听" : "已停止";
+  if (st) st.textContent = running ? t("settings.watch_running") : t("settings.watch_idle");
   if (st) st.style.color = running ? "#5eead4" : "";
 }
 
@@ -227,9 +265,9 @@ function watchPatch() {
 async function saveWatch() {
   try {
     S.config = await api("/api/config", watchPatch());
-    toast("监听设置已保存");
+    toast(t("settings.watch_saved"));
   } catch (e) {
-    toast("保存失败：" + e.message);
+    toast(t("settings.save_failed", { err: e.message }));
   }
 }
 
@@ -242,12 +280,12 @@ async function toggleWatch() {
     if (S.watchRunning) {
       await api("/api/watch/stop", {});
       setWatchRunning(false);
-      toast("已停止监听");
+      toast(t("settings.watch_stopped"));
     } else {
       await api("/api/config", watchPatch());     // 先落盘，start 读的是已存配置
       const d = await api("/api/watch/start", {});
       setWatchRunning(!!(d.status && d.status.running));
-      toast(d.already ? "本来就在监听" : "开始监听");
+      toast(d.already ? t("settings.watch_already") : t("settings.watch_started"));
       openWatchStream();
     }
   } catch (e) {
@@ -271,8 +309,8 @@ function openWatchStream() {
     if (!log) return;
     const r = d.result || {};
     const name = d.rel || r.file || (d.file || "").split(/[\\/]/).pop();
-    const mark = d.event === "processing" ? "… 处理中"
-               : (r.status || d.event || "完成");
+    const mark = d.event === "processing" ? t("settings.watch_processing")
+               : (r.status ? (STATUS_LABEL[r.status] || r.status) : d.event || t("settings.watch_done"));
     const note = r.note ? `  (${r.note})` : "";
     const line = `[${new Date().toLocaleTimeString()}] ${name} → ${mark}${note}`;
     log.textContent = (log.textContent + "\n" + line).trim().split("\n").slice(-200).join("\n");
@@ -296,17 +334,17 @@ async function saveSettings() {
     S.config = await api("/api/config", patch);
     $("#cfgKey").value = "";
     $("#keyState").textContent = S.config.remote_configured
-      ? `已配置：${S.config.remote_key_masked}。留空表示不修改。`
-      : "还没配置。";
-    toast("已保存");
+      ? t("settings.key_set", { masked: S.config.remote_key_masked })
+      : t("settings.key_unset");
+    toast(t("settings.saved"));
   } catch (e) {
-    toast("保存失败：" + e.message);
+    toast(t("settings.save_failed", { err: e.message }));
   }
 }
 
 async function testRemote() {
   const out = $("#testResult");
-  out.textContent = "测试中…";
+  out.textContent = t("settings.testing");
   const body = {
     remote_base_url: $("#cfgBase").value.trim(),
     remote_model: $("#cfgModel").value.trim()
@@ -315,9 +353,11 @@ async function testRemote() {
   if (typed) body.remote_api_key = typed;   // 留空则用服务端已存的
   try {
     const d = await api("/api/test-remote", body);
-    out.textContent = (d.ok ? "✅ " : "❌ ") + d.message;
+    out.textContent = d.ok
+      ? t("settings.test_ok", { msg: d.message })
+      : t("settings.test_bad", { msg: d.message });
   } catch (e) {
-    out.textContent = "❌ " + e.message;
+    out.textContent = t("settings.test_bad", { msg: e.message });
   }
 }
 
@@ -325,18 +365,20 @@ async function testRemote() {
 async function testWrite() {
   const out = $("#writeResult");
   const root = ($("#root").value || S.root || "").trim();
-  if (!root) { out.textContent = "先在第一屏填音乐库路径"; return; }
-  out.textContent = "测试中…";
+  if (!root) { out.textContent = t("settings.need_root_first"); return; }
+  out.textContent = t("settings.testing");
   try {
     const d = await api("/api/write-test?path=" + encodeURIComponent(root));
-    out.textContent = (d.ok ? "✅ " : "❌ ") + d.message;
+    out.textContent = d.ok
+      ? t("settings.test_ok", { msg: d.message })
+      : t("settings.test_bad", { msg: d.message });
   } catch (e) {
-    out.textContent = "❌ " + e.message;
+    out.textContent = t("settings.test_bad", { msg: e.message });
   }
 }
 
 async function rotateToken() {
-  toast("令牌只能在服务端重置：fnlrc token --rotate");
+  toast(t("settings.token_cli_only"));
 }
 
 /* ─────────────────────────────────────────── 历史 */
@@ -345,25 +387,25 @@ async function openHistory() {
   openOverlay("history");
   const sheet = $("#historySheet");
   sheet.innerHTML = `<div class="row" style="justify-content:space-between">
-      <h2>历史任务</h2>
-      <button class="btn-ghost" data-close type="button">关闭 ✕</button>
-    </div><div class="hr"></div><div class="empty">读取中…</div>`;
+      <h2>${esc(t("history.title"))}</h2>
+      <button class="btn-ghost" data-close type="button">${esc(t("common.close"))}</button>
+    </div><div class="hr"></div><div class="empty">${esc(t("common.loading"))}</div>`;
   sheet.querySelector("[data-close]").addEventListener("click", () => closeOverlay("history"));
 
   try {
     const d = await api("/api/jobs");
     const jobs = d.jobs || [];
     sheet.innerHTML = `<div class="row" style="justify-content:space-between">
-        <h2>历史任务</h2>
-        <button class="btn-ghost" data-close type="button">关闭 ✕</button>
+        <h2>${esc(t("history.title"))}</h2>
+        <button class="btn-ghost" data-close type="button">${esc(t("common.close"))}</button>
       </div><div class="hr"></div>` + (jobs.map(j => `
         <div class="row" style="justify-content:space-between;padding:.7rem 0;border-bottom:1px solid var(--line-soft)">
           <span class="mono" style="max-width:50%;overflow:hidden;text-overflow:ellipsis"
                 title="${esc(j.root)}">${esc(j.root)}</span>
           <span class="small">${esc(fmtTime(j.started_at))}</span>
-          <span class="small">写 ${(j.stats || {}).written || 0}</span>
-          <button class="btn btn-outline" data-job="${esc(j.job_id)}" type="button">查看</button>
-        </div>`).join("") || '<div class="empty">还没有历史任务</div>');
+          <span class="small">${esc(t("history.written", { n: (j.stats || {}).written || 0 }))}</span>
+          <button class="btn btn-outline" data-job="${esc(j.job_id)}" type="button">${esc(t("history.view"))}</button>
+        </div>`).join("") || `<div class="empty">${esc(t("history.empty"))}</div>`);
 
     sheet.querySelector("[data-close]").addEventListener("click", () => closeOverlay("history"));
     sheet.querySelectorAll("[data-job]").forEach(b => b.addEventListener("click", async () => {
@@ -372,11 +414,11 @@ async function openHistory() {
         closeOverlay("history");
         showResults(rep.results, rep.stats, b.dataset.job);
       } catch (e) {
-        toast("读取报告失败：" + e.message);
+        toast(t("history.report_failed", { err: e.message }));
       }
     }));
   } catch (e) {
-    sheet.innerHTML = `<div class="empty">读取历史失败：${esc(e.message)}</div>`;
+    sheet.innerHTML = `<div class="empty">${esc(t("history.failed", { err: e.message }))}</div>`;
   }
 }
 
@@ -386,17 +428,17 @@ export function initGate() {
   if (S.token) return;
   openOverlay("gate");
   const submit = async () => {
-    const t = $("#gateToken").value.trim();
-    if (!t) { $("#gateMsg").textContent = "先填令牌"; return; }
-    S.token = t;
+    const tok = $("#gateToken").value.trim();
+    if (!tok) { $("#gateMsg").textContent = t("gate.need"); return; }
+    S.token = tok;
     try {
       // 拿配置当校验：能读到就说明令牌对
       await api("/api/config");
-      localStorage.setItem("fnlrc_token", t);
+      localStorage.setItem("fnlrc_token", tok);
       closeOverlay("gate");
     } catch (e) {
       S.token = "";
-      $("#gateMsg").textContent = "令牌不对：" + e.message;
+      $("#gateMsg").textContent = t("gate.bad", { msg: e.message });
     }
   };
   $("#gateSubmit").addEventListener("click", submit);

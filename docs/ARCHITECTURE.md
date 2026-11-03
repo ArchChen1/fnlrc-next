@@ -33,6 +33,10 @@ fnlrc/
 │   ├── watcher.py            监听文件夹：纯轮询、静默期、搬运、重试、状态落盘
 │   ├── fnos.py               飞牛歌词库：探测 / 差异计划 / 原地回填（**零第三方依赖**）
 │   ├── store.py               配置 / 访问令牌 / 任务报告
+│   ├── i18n/                  ★ 界面文案（每语言一个文件）+ t()/set_lang()/detect()
+│   │   ├── __init__.py         加载器：键查询、回退英文、语言探测
+│   │   ├── zh.py               简体中文词表
+│   │   └── en.py               英文词表（FALLBACK，键最全）
 │   ├── server.py               FastAPI 应用（HTTP + SSE + 静态前端）
 │   ├── desktop.py              pywebview 桌面壳
 │   ├── cli.py                  命令行
@@ -41,6 +45,7 @@ fnlrc/
 │       ├── index.html          骨架与文案
 │       ├── styles.css
 │       └── js/                 ES module 拆分：state / core / fsbrowser / screens / panels / manual / main
+│           └── i18n/           前端词表：index.js（t/applyI18n）+ zh.js / en.js
 ├── docs/                      文档（含本文）
 ├── scripts/                   打包脚本（PyInstaller / Docker）+ 诊断工具
 ├── tests/                     回归用例（含飞牛规则边界）
@@ -60,6 +65,8 @@ fnlrc/
 | `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重 | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
 | `fnos.py` | 飞牛数据库的只读探测、差异计划、原地回填（已有歌词）与**补建歌词行**（没有歌词的歌，要 `--allow-insert`） | 歌词的获取与翻译（它只负责"把已生成的 `.lrc` 搬进飞牛"） |
 | `store.py` | 任务与结果的持久化、配置与令牌、回滚 | 业务逻辑 |
+| `i18n/` | **界面文案**：键查询 `t()`、语言切换、优先级探测（`--lang` > `FNLRC_LANG` > config > 系统）；缺译为英文、再缺为键名 | 业务逻辑；**数据不翻译**（`status` 等仍是英文枚举，见 ADR-022） |
+| `web/js/i18n/` | 前端同一套键名 + `applyI18n()`（`data-i18n` 属性）+ `setLang()` 即时切换 | 动态渲染（由各模块在渲染时调 `t()`） |
 | `server.py` | HTTP 契约、SSE 进度、静态资源 | 业务逻辑（调用 pipeline） |
 | `desktop.py` | 起本地服务 + 原生窗口 + 文件夹对话框 | 业务逻辑 |
 
@@ -216,7 +223,7 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 |---|---|---|---|
 | `GET` | `/` | 返回 `web/index.html`（**回环访问时注入访问令牌**） | — |
 | `GET` | `/styles.css`、`/js/*` | 静态资源（前端是多文件，见 UI-SPEC §5） | — |
-| `GET` | `/api/version` | 版本、可用的翻译后端 | — |
+| `GET` | `/api/version` | 版本、可用的翻译后端、**界面语言**（`langs` / `default_lang`） | — |
 | `GET` | `/api/auth` | **只读的令牌校验点**：令牌 + 同源校验（与写操作同一口径），无副作用。首次引导用它确认令牌 | ✅ |
 | `POST` | `/api/scan` | `{root, limit?}` → 库统计（总数、已有双语、缺歌词、乱码、纯音乐、按目录分布） | — |
 | `POST` | `/api/preview` | `{root, limit?}` → 每首歌的**静态判定**（`decide()`，不联网、秒回） | — |
@@ -227,7 +234,7 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | `POST` | `/api/jobs/{id}/stop` | 优雅停止（当前曲处理完即停） | ✅ |
 | `GET` | `/api/report/{id}?status=&format=csv` | 结果列表，支持按状态筛选与 CSV 导出 | — |
 | `POST` | `/api/rollback` | `{files: [...]}` → 从 `.bak` 恢复 | ✅ |
-| `GET` | `/api/config` | 当前配置。**绝不回显 API key**，只给 `remote_configured` + `remote_key_masked`；含 `setup_needed` 供前端判断是否走引导 | — |
+| `GET` | `/api/config` | 当前配置。**绝不回显 API key**，只给 `remote_configured` + `remote_key_masked`；含 `setup_needed` 供前端判断是否走引导，`lang` / `langs` 供界面语言选择 | — |
 | `POST` | `/api/config` | 更新配置。`remote_api_key: "••••"` 表示"不修改" | ✅ |
 | `POST` | `/api/test-remote` | 验证 Base URL / key / 模型名，返回**可区分的原因**（错 key / 余额不足 / 模型名错 / 限流） | ✅ |
 | `GET` | `/api/fs?path=` | 目录浏览（网页版选目录用；桌面版走原生对话框） | — |
@@ -326,6 +333,25 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | Docker | `python:3.12-slim` | `uvicorn` 起服务；`-v` 挂载音乐库；镜像内不含桌面依赖 |
 
 **可选依赖降级**：`mutagen`（标签）缺失 → 退回文件名解析；`pywebview` 缺失 → 退回浏览器模式；`fastapi`/`uvicorn` 缺失 → 只能 Web/CLI 之前的核心逻辑（`pipeline` 本身不依赖它们）。
+
+### 界面语言（M4）
+
+三端共用同一份词表结构，**每语言一个文件**：
+
+| 端 | 词表位置 | 入口 | 缺译回退 |
+|---|---|---|---|
+| CLI / 服务端 | `fnlrc/i18n/<lang>.py` 的 `STRINGS` dict | `t("key", **vars)` | → 英文 → 键名本身 |
+| 网页 | `fnlrc/web/js/i18n/<lang>.js` 的 `export default` | `t("key", vars)` / `applyI18n()` | → 英文 → 键名本身 |
+
+- **优先级**：CLI `--lang` > `FNLRC_LANG` > `config.json` 的 `lang` > `zh`；
+  网页 `localStorage["fnlrc_lang"]` > `navigator.language` > `zh`。
+- **数据不翻译**：报告与 CSV 里的 `status` / `source` / `backend` 是英文枚举，
+  只在展示层映射；`note` 保持中文。导出的文件不因语言而变（决策见 ADR-022）。
+- **新增语言**：加一个文件 + 在两个加载器里各登记一行。前端是零构建的，
+  浏览器不能扫目录，所以必须显式登记。
+- **一致性由测试保证**：`tests/test_i18n.py`（后端键集合/占位符）、
+  `tests/test_web_i18n.py`（前端键集合 + `index.html` 与 JS 里引用的键都存在 +
+  前后端同名键中文值一致 + 语言列表一致）。
 
 ---
 

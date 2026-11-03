@@ -147,6 +147,16 @@ python -m fnlrc fnos --app-data /usr/local/apps/@appdata/trim.music --appmeta /v
 
 `run` 的退出码：`0` 全部正常，`1` 用法或致命错误，`2` 跑完了但有失败项。方便放进 cron。
 
+命令行输出默认是中文。想换成英文，加 `--lang en`（放在子命令前面）：
+
+```bash
+python -m fnlrc --lang en scan --root /music
+FNLRC_LANG=en python -m fnlrc scan --root /music      # 环境变量，一次设置一直有效
+python -m fnlrc config --set lang=en                  # 写进配置，长期生效
+```
+
+优先级：`--lang` > 环境变量 `FNLRC_LANG` > 配置项 `lang` > 中文。网页端不看这几项，它认的是设置面板里那个下拉框。
+
 ### 翻译后端
 
 默认是「源站译词」：只用网易云自带的中文翻译，**一次后端请求都不发**，完全不往外发歌词（找歌词本身要联网，那是另一回事）。源站没给翻译就写单语。

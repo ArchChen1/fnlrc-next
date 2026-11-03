@@ -52,6 +52,8 @@ CONFIG_KEYS = (
     "providers_disabled",  # 黑名单：优先级高于白名单
     "provider_keys",       # {源名: key}，各插件的自有凭据，与 remote_api_key 同等敏感
     "plugins_dir",         # 自定义插件目录（留空= $FNLRC_DATA/plugins）
+    # 界面语言（M4）。只影响 CLI / 服务端默认文案；网页端以 localStorage 为准。
+    "lang",                # zh / en；空串=跟着系统/浏览器走
 )
 SECRET_KEYS = ("remote_api_key",)
 # 引导口径的版本号。将来引导流程大改（新增步骤）时可抬高它，让老用户再走一次。

@@ -9,11 +9,12 @@
  */
 import { S } from "./state.js";
 import { $, $$, api, openOverlay, closeOverlay } from "./core.js";
+import { t } from "./i18n/index.js";
 import { go, adoptScanned } from "./screens.js";
 import { openFsBrowser } from "./fsbrowser.js";
 import { initGate } from "./panels.js";
 
-const LABEL = { 0: "欢迎", 1: "访问令牌", 2: "选择音乐库" };
+const LABEL_KEY = { 0: "wizard.step_welcome", 1: "wizard.step_token", 2: "wizard.step_library" };
 
 let flow = [];        // 本次实际要走的步骤；回环访问时省掉「令牌」这一步
 let at = 0;           // 在 flow 里的下标
@@ -46,9 +47,9 @@ export async function initWizard() {
 function show() {
   const step = flow[at];
   $$(".wizstep").forEach(s => { s.hidden = Number(s.dataset.step) !== step; });
-  $("#wizEyebrow").textContent = `Step ${at + 1} / ${flow.length}`;
+  $("#wizEyebrow").textContent = t("step.of", { i: at + 1, n: flow.length });
   $("#wizDots").innerHTML = flow.map((s, i) =>
-    `<span class="wizdot" aria-current="${i === at}" data-done="${i < at}">${LABEL[s]}</span>`
+    `<span class="wizdot" aria-current="${i === at}" data-done="${i < at}">${t(LABEL_KEY[s])}</span>`
   ).join("");
   if (step === 2 && !$("#wizRoot").value) {
     $("#wizRoot").value = localStorage.getItem("fnlrc_root") || "";
@@ -72,22 +73,22 @@ function advance() { if (at < flow.length - 1) { at++; show(); } }
 function retreat() { if (at > 0) { at--; show(); } }
 
 async function verifyToken() {
-  const t = $("#wizToken").value.trim();
-  if (!t) { $("#wizTokenMsg").textContent = "先填令牌"; return; }
+  const tok = $("#wizToken").value.trim();
+  if (!tok) { $("#wizTokenMsg").textContent = t("gate.need"); return; }
   const prev = S.token;
-  S.token = t;
+  S.token = tok;
   const btn = $("#wizVerify");
-  btn.disabled = true; btn.textContent = "验证中…";
+  btn.disabled = true; btn.textContent = t("wizard.verifying");
   try {
     await api("/api/auth");        // 与写操作同一套校验，但只读、无副作用
-    localStorage.setItem("fnlrc_token", t);
-    $("#wizTokenMsg").textContent = "✓ 令牌正确";
+    localStorage.setItem("fnlrc_token", tok);
+    $("#wizTokenMsg").textContent = t("wizard.token_ok");
     advance();
   } catch (e) {
     S.token = prev;                // 错了就还原，别把坏令牌留在状态里
-    $("#wizTokenMsg").textContent = "令牌不对：" + e.message;
+    $("#wizTokenMsg").textContent = t("gate.bad", { msg: e.message });
   } finally {
-    btn.disabled = false; btn.textContent = "验证并继续";
+    btn.disabled = false; btn.textContent = t("wizard.verify");
   }
 }
 
@@ -102,20 +103,20 @@ function browse() {
 
 async function scan() {
   const root = $("#wizRoot").value.trim();
-  if (!root) { $("#wizMsg").textContent = "先填一个音乐库路径"; return; }
+  if (!root) { $("#wizMsg").textContent = t("pick.need_root"); return; }
   const btn = $("#wizScan");
-  btn.disabled = true; btn.textContent = "扫描中…";
+  btn.disabled = true; btn.textContent = t("wizard.scanning");
   $("#wizDone").disabled = true;
   try {
     const d = await api("/api/scan", { root });   // 只读：不联网、不写库
     scanned = { root, summary: d.summary };
-    $("#wizMsg").textContent = `✓ 找到 ${d.summary.total} 个音频文件，可以开始了`;
+    $("#wizMsg").textContent = t("wizard.scan_ok", { n: d.summary.total });
     $("#wizDone").disabled = false;
   } catch (e) {
     scanned = null;
     $("#wizMsg").textContent = e.message;   // 服务端已带「打不开这个路径：」前缀
   } finally {
-    btn.disabled = false; btn.textContent = "扫描";
+    btn.disabled = false; btn.textContent = t("wizard.scan");
   }
 }
 

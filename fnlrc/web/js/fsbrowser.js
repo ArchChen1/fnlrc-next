@@ -4,6 +4,7 @@
  * 只有拿不到原生对话框时才用这个。
  */
 import { $, esc, api, toast, openOverlay, closeOverlay } from "./core.js";
+import { t } from "./i18n/index.js";
 
 let onPickCallback = null;
 
@@ -18,7 +19,7 @@ async function load(path) {
   try {
     data = await api("/api/fs?path=" + encodeURIComponent(path));
   } catch (e) {
-    toast("打不开这个路径：" + e.message);
+    toast(t("fs.cannot_open", { err: e.message }));
     if (!path) return;
     // 打不开就退回上一级，别把用户卡死在一个坏路径上
     const parent = path.replace(/[\\/][^\\/]*$/, "");
@@ -35,16 +36,16 @@ function render(d) {
   ).join("");
   $("#fsSheet").innerHTML = `
     <div class="row" style="justify-content:space-between">
-      <h2>选择目录</h2>
-      <button class="btn-ghost" data-close type="button">关闭 ✕</button>
+      <h2>${esc(t("fs.title"))}</h2>
+      <button class="btn-ghost" data-close type="button">${esc(t("common.close"))}</button>
     </div>
-    <p class="mono" style="margin:1rem 0">${esc(d.path)}　·　音频 ${d.audio_count} 个</p>
+    <p class="mono" style="margin:1rem 0">${esc(t("fs.info", { path: d.path, n: d.audio_count }))}</p>
     <div class="row">
-      <button class="btn btn-secondary" data-go="${esc(d.parent)}" type="button">↑ 上一级</button>
-      <button class="btn btn-primary" data-pick="${esc(d.path)}" type="button">就用这个目录</button>
+      <button class="btn btn-secondary" data-go="${esc(d.parent)}" type="button">${esc(t("fs.up"))}</button>
+      <button class="btn btn-primary" data-pick="${esc(d.path)}" type="button">${esc(t("fs.pick"))}</button>
     </div>
     <div class="hr"></div>
-    <div class="dirlist">${dirs || '<div class="empty">没有子目录</div>'}</div>`;
+    <div class="dirlist">${dirs || `<div class="empty">${esc(t("fs.no_subdir"))}</div>`}</div>`;
 
   const sheet = $("#fsSheet");
   sheet.querySelector("[data-close]").addEventListener("click", () => closeOverlay("fsbrowser"));

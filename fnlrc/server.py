@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from . import i18n
 from . import library as lib
 from . import pipeline as pl
 from . import providers as P
@@ -124,6 +125,9 @@ def version():
     return {
         "version": __version__,
         "translate_backends": ["source", "remote", "none"],
+        # 界面语言：前端据此校验自己内置的语言是否被服务端支持（纯提示用）
+        "langs": i18n.available(),
+        "default_lang": i18n.get_lang(),
     }
 
 
@@ -164,6 +168,10 @@ def get_config():
         # 监听文件夹（M1）：整份 watch 配置 + 运行状态
         "watch": store.watch_config(cfg),
         "watch_running": _watch_is_running(),
+        # 界面语言（M4）。网页端以 localStorage 为准，这里只是给「从没选过」的用户
+        # 一个服务端侧的默认值（配置文件里的 lang）。
+        "lang": cfg.get("lang", ""),
+        "langs": i18n.available(),
     }
 
 

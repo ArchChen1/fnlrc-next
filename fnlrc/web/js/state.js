@@ -1,35 +1,25 @@
 /**
- * 全局状态与文案表。**不依赖任何其它模块** —— 其余模块都 import 它，
- * 保持它零依赖可以避免循环引用。
+ * 全局状态与文案表。
+ *
+ * 依赖的只有 i18n（它自身零依赖），保持这层单向可以避免循环引用：
+ *   i18n ← state ← 其余所有模块
+ *
+ * 文案全部走 `t()`，切换语言后**重新调用一次取值**即可 —— 所以这里的
+ * 表用 Proxy 包了一层，不是静态对象。用 Proxy 而不是函数，是为了让
+ * `ACTION_LABEL[k]` 这种现有写法一行都不用改。
  */
+import { t, tOr } from "./i18n/index.js";
 
-/** 界面文案集中在这里，为将来 i18n 留口（UI-SPEC §5） */
-export const ACTION_LABEL = {
-  create: "会新建",
-  bilingualize: "会补成双语",
-  rebuild: "会重做",
-  skip: "会跳过"
-};
+/** 界面文案表。查不到时回退到原始枚举值，绝不显示空白。 */
+export const ACTION_LABEL = new Proxy({}, {
+  get: (_, k) => (typeof k === "string" ? tOr("action." + k, k) : undefined)
+});
 
-export const STATUS_LABEL = {
-  written: "✓ 双语",
-  // 与 written 的区别：译文是按**用户本地已有的时间轴/断句**插进去的，
-  // 本地文件的结构没被换掉。用户在意这个区别，所以要能一眼看出来。
-  written_keep_local: "✓ 双语·留本地轴",
-  dumped: "✓ 预览",
-  written_mono: "⚠ 单语",
-  skipped_existing: "⊘ 跳过",
-  skip: "⊘ 跳过",
-  skip_instrumental: "⊘ 纯音乐",
-  no_lyrics: "⚠ 无歌词",
-  timeout: "⚠ 超时",
-  lang_mismatch: "🔴 待人工",
-  validate_failed: "🔴 未通过",
-  write_failed: "🔴 写入失败",
-  error: "🔴 出错"
-};
+export const STATUS_LABEL = new Proxy({}, {
+  get: (_, k) => (typeof k === "string" ? tOr("status." + k, k) : undefined)
+});
 
-/** 状态分组：决定配色与筛选归类 */
+/** 状态分组：决定配色与筛选归类（纯数据，不翻译） */
 export const GROUP = {
   ok: ["written", "written_keep_local", "dumped"],
   skip: ["skipped_existing", "skip", "skip_instrumental"],
@@ -43,17 +33,24 @@ export function tone(status) {
   return "warn";
 }
 
-/** 翻译后端。第二项是说明，直接显示在预览屏的提示里 */
-export const BACKENDS = [
-  ["source", "源站译词", "默认。只用网易云自带的中文译词，不调任何后端、完全不出网；源站没有译词就写单语。"],
-  ["remote", "我的 API", "用自己的 DeepSeek key 补翻源站没给译文的那些行。会把歌词文本发出去。"],
-  ["none", "不翻译", "只修格式与乱码，不生成译文。"]
-];
+/**
+ * 翻译后端。**必须用函数**而不是常量数组 —— 模块加载时还没确定语言
+ * （`initLang()` 在 boot() 里才跑），常量会把中文烤死在里面。
+ */
+export function backends() {
+  return ["source", "remote", "none"].map(v => ([
+    v, t("backend." + v), t("backend." + v + ".hint")
+  ]));
+}
 
-export const FILTERS = [
-  ["all", "全部"], ["written", "已写入"], ["written_mono", "单语"],
-  ["no_lyrics", "无歌词"], ["timeout", "超时"], ["lang_mismatch", "待人工"], ["failed", "失败"]
-];
+export const FILTER_KEYS = ["all", "written", "written_mono",
+                            "no_lyrics", "timeout", "lang_mismatch", "failed"];
+
+/** 同上：惰性求值，切语言后重新调一次就行 */
+export function filters() {
+  return FILTER_KEYS.map(k => [k, t("filter." + k)]);
+}
+
 
 const TOKEN = (window.__FNLRC_TOKEN__ || "").trim();
 

@@ -3,6 +3,7 @@
  * 所有网络请求都从这里走，方便统一处理鉴权失败与错误信息。
  */
 import { S } from "./state.js";
+import { getLang } from "./i18n/index.js";
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -53,5 +54,6 @@ export function openOverlay(id) { $("#" + id).classList.add("open"); }
 export function closeOverlay(id) { $("#" + id).classList.remove("open"); }
 
 export function fmtTime(sec) {
-  return sec ? new Date(sec * 1000).toLocaleString("zh-CN") : "";
+  const loc = getLang() === "zh" ? "zh-CN" : "en-US";
+  return sec ? new Date(sec * 1000).toLocaleString(loc) : "";
 }

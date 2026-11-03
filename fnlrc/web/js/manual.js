@@ -13,6 +13,7 @@
  */
 import { S } from "./state.js";
 import { $, esc, api, toast, openOverlay, closeOverlay } from "./core.js";
+import { t } from "./i18n/index.js";
 
 const DRAFT_PREFIX = "fnlrc_draft:";
 const EDITABLE = ["written_mono", "lang_mismatch", "timeout",
@@ -41,22 +42,22 @@ export function canEdit(status) {
 
 /** 从报告行打开编辑器 */
 export async function openManual(rel) {
-  if (!S.root) { toast("先扫描一个音乐库"); return; }
+  if (!S.root) { toast(t("manual.need_root")); return; }
   cur = { root: S.root, rel, song: null, draft: null };
-  renderSheet("载入中…");
+  renderSheet(t("manual.loading"));
   openOverlay("manual");
   try {
     const d = await api("/api/manual/lines", { root: S.root, files: [rel] });
     const song = (d.songs || [])[0];
     if (!song || song.error) {
-      renderSheet(song && song.error ? song.error : "读不到这首歌的歌词");
+      renderSheet(song && song.error ? song.error : t("manual.no_lyrics"));
       return;
     }
     cur.song = song;
     cur.draft = loadDraft(rel);
     renderSheet();
   } catch (e) {
-    renderSheet("载入失败：" + e.message);
+    renderSheet(t("manual.load_failed", { err: e.message }));
   }
 }
 
@@ -67,8 +68,8 @@ function renderSheet(message) {
   if (message !== undefined) {
     sheet.innerHTML = `
       <div class="row" style="justify-content:space-between">
-        <h2>补译文</h2>
-        <button class="btn-ghost" data-mclose type="button">关闭 ✕</button>
+        <h2>${esc(t("manual.title"))}</h2>
+        <button class="btn-ghost" data-mclose type="button">${esc(t("common.close"))}</button>
       </div>
       <div class="hr"></div>
       <div class="empty">${esc(message)}</div>`;
@@ -84,40 +85,40 @@ function renderSheet(message) {
       <span class="mtime mono">${esc(ln.time)}</span>
       <span class="msrc">${esc(ln.original)}</span>
       <input class="mtran" data-i="${ln.index}" type="text"
-             value="${esc(val)}" placeholder="填这句的中文译文…" autocomplete="off">
+             value="${esc(val)}" placeholder="${esc(t("manual.placeholder"))}" autocomplete="off">
     </div>`;
   }).join("");
 
   sheet.innerHTML = `
     <div class="row" style="justify-content:space-between">
-      <h2>补译文</h2>
-      <button class="btn-ghost" data-mclose type="button">关闭 ✕</button>
+      <h2>${esc(t("manual.title"))}</h2>
+      <button class="btn-ghost" data-mclose type="button">${esc(t("common.close"))}</button>
     </div>
     <p class="small" style="margin-top:.4rem">
       ${esc(song.title || "")} ${song.artist ? "· " + esc(song.artist) : ""}
       <span class="mono" style="margin-left:.5rem">${esc(song.file)}</span>
     </p>
     <p class="note" style="margin:.9rem 0 1rem">
-      只补译文，<strong style="color:#fff">时间轴一个都不动</strong>。留空的行走保持原文单语。
-      ${nDraft ? `<span style="color:#fff">已恢复上次未保存的 ${nDraft} 行草稿。</span>` : ""}
+      ${t("manual.note")}
+      ${nDraft ? `<span style="color:#fff">${esc(t("manual.draft_restored", { n: nDraft }))}</span>` : ""}
     </p>
 
     <div class="scroller mlist" id="mList">
-      <div class="mline mhead"><span>时间</span><span>原文</span><span>译文</span></div>
-      ${rows || '<div class="empty">这首歌没有可编辑的歌词行</div>'}
+      <div class="mline mhead"><span>${esc(t("manual.time"))}</span><span>${esc(t("manual.original"))}</span><span>${esc(t("manual.translation"))}</span></div>
+      ${rows || `<div class="empty">${esc(t("manual.no_lines"))}</div>`}
     </div>
 
     <div id="mProblems" class="prebox" style="color:var(--bad)"></div>
 
     <div class="row" style="margin-top:1.4rem">
       <label class="row checkline" style="margin:0">
-        <input type="checkbox" id="mMemory"> <span>把这次填的译文记入记忆库（默认关）</span>
+        <input type="checkbox" id="mMemory"> <span>${esc(t("manual.memory"))}</span>
       </label>
     </div>
     <div class="row" style="margin-top:1rem">
-      <button class="btn btn-primary" id="mSave" type="button">保存</button>
-      <button class="btn btn-outline" id="mClear" type="button">丢弃草稿</button>
-      <span class="small" style="margin-left:auto">未保存的译文存在浏览器本地，关了页面也不丢。</span>
+      <button class="btn btn-primary" id="mSave" type="button">${esc(t("manual.save"))}</button>
+      <button class="btn btn-outline" id="mClear" type="button">${esc(t("manual.discard"))}</button>
+      <span class="small" style="margin-left:auto">${esc(t("manual.draft_hint"))}</span>
     </div>`;
 
   $("#mList").scrollTop = 0;
@@ -156,7 +157,7 @@ function clearDraft() {
   // 清空所有输入框
   const sheet = $("#manualSheet");
   if (sheet) sheet.querySelectorAll("input[data-i]").forEach(inp => { inp.value = ""; });
-  toast("已丢弃本地草稿");
+  toast(t("manual.discarded"));
 }
 
 /* ── 保存 ─────────────────────────────────────────────── */
@@ -178,7 +179,7 @@ async function doSave() {
   const btn = $("#mSave");
   const box = $("#mProblems");
   box.textContent = "";
-  btn.disabled = true; btn.textContent = "保存中…";
+  btn.disabled = true; btn.textContent = t("common.saving");
   try {
     const d = await api("/api/manual/save", {
       root: cur.root,
@@ -188,17 +189,17 @@ async function doSave() {
       backup: true,
     });
     if (!d.ok) {
-      box.textContent = (d.problems || ["保存被拒绝"]).join("\n");
-      toast("没通过校验，看下面的提示");
+      box.textContent = (d.problems || [t("manual.rejected_generic")]).join("\n");
+      toast(t("manual.rejected"));
       return;
     }
     clearDraftSilent();
-    toast(`已保存 ${d.lines} 行译文`);
+    toast(t("manual.saved", { n: d.lines }));
     closeOverlay("manual");
   } catch (e) {
-    toast("保存失败：" + e.message);
+    toast(t("manual.save_failed", { err: e.message }));
   } finally {
-    btn.disabled = false; btn.textContent = "保存";
+    btn.disabled = false; btn.textContent = t("manual.save");
   }
 }
 
