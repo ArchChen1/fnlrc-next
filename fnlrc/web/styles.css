@@ -47,6 +47,18 @@ html{scroll-behavior:smooth;scrollbar-gutter:stable}
 body{margin:0;background:var(--bg-primary);color:var(--text);
      font-family:var(--sans);-webkit-font-smoothing:antialiased}
 
+/* ── 滚动条：跟随主题（纯黑底 + 白色半透明），不用系统灰 ─────────
+   Firefox 走 scrollbar-width/color；Chromium/Safari（桌面版用的 webview）走 ::-webkit-scrollbar。
+   两套都写，互相不打架。 */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:var(--radius-full);
+                          border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.4);background-clip:content-box}
+::-webkit-scrollbar-thumb:active{background:rgba(255,255,255,.55);background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+
 /* ── 单页 Tab 布局 ──────────────────────────────────────── */
 /* .app 只管纵向排布：顶栏 + 面板 + （手机）底部栏。页面本身自然滚动。 */
 .app{display:flex;flex-direction:column;min-height:100dvh}
@@ -463,6 +475,12 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
         line-height:1.7;white-space:pre-wrap;word-break:break-word;
         max-height:22vh;overflow-y:auto;color:rgba(255,255,255,.8)}
 .prebox:empty{display:none}
+/* 监听日志：定高、内部滚动 */
+.watchlog{min-height:16rem;max-height:min(52dvh,28rem);overflow-y:auto;
+          margin-top:.9rem;white-space:pre-wrap;word-break:break-word;
+          font-size:.8125rem;line-height:1.7}
+/* 空日志不显示那个空盒子，改用下面的提示行 */
+.watchlog:empty{display:none}
 
 /* ── 人工翻译编辑器（M3）──────────────────────────────────────── */
 .mlist{max-height:48vh}

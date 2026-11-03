@@ -53,6 +53,11 @@ export function initPanels() {  $("#openSettings").addEventListener("click", ope
   $("#fnosApply").addEventListener("click", fnosApply);
   $("#watchSave").addEventListener("click", saveWatch);
   $("#watchToggle").addEventListener("click", toggleWatch);
+  $("#watchLogClear").addEventListener("click", () => {
+    const log = $("#watchLog");
+    if (log) log.textContent = "";
+    syncWatchLogEmpty();
+  });
 
   buildLangPicker();
   initSettingsNav();
@@ -218,6 +223,7 @@ function initSettingsNav() {
       b.setAttribute("aria-current", String(b.dataset.pane === pane)));
     $$("#setPanes .setPane").forEach(s => { s.hidden = s.dataset.pane !== pane; });
     panes.scrollTop = 0;
+    if (pane === "watchlog") syncWatchLogEmpty();
   };
 
   nav.addEventListener("click", e => {
@@ -238,6 +244,7 @@ function initSettingsNav() {
 
 async function openSettings() {
   openOverlay("settings");
+  syncWatchLogEmpty();
   try {
     S.config = await api("/api/config");
     applyConfig(S.config);
@@ -343,7 +350,9 @@ async function toggleWatch() {
   }
 }
 
-/* SSE：把监听事件追加到日志框。断线后浏览器会自动重连。 */
+/* SSE：把监听事件追加到日志框。断线后浏览器会自动重连。
+   日志只活在内存里（最多 200 行）：服务端不保存监听历史，刷新页面就没了 ——
+   这一点在「监听日志」页上直接写给用户看，免得以为是日志丢了。 */
 let watchSrc = null;
 function openWatchStream() {
   if (!S.token || watchSrc) return;
@@ -362,8 +371,16 @@ function openWatchStream() {
     const line = `[${new Date().toLocaleTimeString()}] ${name} → ${mark}${note}`;
     log.textContent = (log.textContent + "\n" + line).trim().split("\n").slice(-200).join("\n");
     log.scrollTop = log.scrollHeight;
+    syncWatchLogEmpty();
   };
   watchSrc.onerror = () => { /* 静默重连；服务停了会一直重试 */ };
+}
+
+/** 日志为空时显示提示行，有内容就藏起来。 */
+function syncWatchLogEmpty() {
+  const log = $("#watchLog");
+  const hint = $("#watchLogEmpty");
+  if (hint) hint.hidden = !!(log && log.textContent.trim());
 }
 
 async function saveSettings() {

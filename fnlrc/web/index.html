@@ -329,6 +329,7 @@
         <button class="setNavItem" type="button" data-pane="api" data-i18n="settings.api_section">我的 API</button>
         <button class="setNavItem" type="button" data-pane="library" data-i18n="settings.library_section">音乐库</button>
         <button class="setNavItem" type="button" data-pane="watch" data-i18n="settings.watch_section">监听</button>
+        <button class="setNavItem" type="button" data-pane="watchlog" data-i18n="settings.watch_log_section">监听日志</button>
         <button class="setNavItem" type="button" data-pane="other" data-i18n="settings.other_section">其它</button>
         <button class="setNavItem" type="button" data-pane="fnos" data-i18n="settings.fnos_section">回填到飞牛</button>
       </nav>
@@ -390,7 +391,20 @@
             <button class="btn btn-secondary" id="watchToggle" type="button" data-i18n="settings.watch_start">开始监听</button>
             <span class="small" id="watchState"></span>
           </div>
-          <pre class="prebox" id="watchLog" style="margin-top:.9rem;max-height:12rem;overflow:auto"></pre>
+        </section>
+
+        <section class="setPane" data-pane="watchlog" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.watch_log_section">监听日志</h3>
+          <div class="row" style="margin-top:1rem;justify-content:space-between">
+            <span class="small" id="watchLogHint" data-i18n="settings.watch_log_hint">
+              只显示这一次打开面板之后的事件。服务端不保存历史。
+            </span>
+            <button class="btn btn-outline" id="watchLogClear" type="button" data-i18n="settings.watch_log_clear">清空</button>
+          </div>
+          <pre class="prebox watchlog" id="watchLog"></pre>
+          <p class="small" id="watchLogEmpty" data-i18n="settings.watch_log_empty" style="margin:.6rem 0 0">
+            还没有事件。监听每处理一首歌会在这里追加一行。
+          </p>
         </section>
 
         <section class="setPane" data-pane="other" hidden>
