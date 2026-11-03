@@ -248,6 +248,7 @@ fnlrc/web/
     ├── fsbrowser.js    网页版目录浏览
     ├── screens.js      五屏的渲染与交互
     ├── panels.js       设置 / 历史 / 令牌闸门
+    ├── wizard.js       首次使用引导（欢迎 → 令牌 → 选库，ADR-018）
     └── main.js         装配与启动
 ```
 

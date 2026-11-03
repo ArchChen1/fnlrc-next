@@ -124,6 +124,17 @@ def version():
 
 
 # ---------------------------------------------------------------- 配置
+@app.get("/api/auth")
+def auth_check(request: Request, x_fnlrc_token: str | None = Header(default=None)):
+    """只读的**令牌校验点**：前端拿它判断「这个令牌对不对」。
+
+    校验口径与写操作**完全一致**（令牌 + 同源），但不产生任何副作用 ——
+    首次使用引导填完令牌后调它确认，而不是拿一个写接口去试错。
+    """
+    require_token(request, x_fnlrc_token)
+    return {"ok": True}
+
+
 @app.get("/api/config")
 def get_config():
     """**绝不回显 API key**。只告诉前端"配没配"以及要用哪个 base/model。"""
@@ -143,6 +154,9 @@ def get_config():
         "remote_configured": bool(key),
         "remote_key_masked": P.mask_key(key),
         "remote_locked_by_env": store.api_key_locked(),
+        # 首次使用引导：全新环境 / 配置损坏时为真，前端据此决定是否显示欢迎流程
+        "setup_needed": store.setup_needed(),
+        "setup_version": store.SETUP_VERSION,
     }
 
 

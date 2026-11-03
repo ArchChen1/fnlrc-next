@@ -328,6 +328,75 @@
   </div>
 </div>
 
+<!-- 首次使用引导：欢迎 → 填令牌 → 选库。已有配置不会看到它（见 js/wizard.js） -->
+<div class="overlay" id="wizard">
+  <div class="sheet wiz" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
+    <div class="row" style="justify-content:space-between">
+      <p class="eyebrow" id="wizEyebrow">Step 1 / 3</p>
+      <button class="btn-ghost" id="wizSkip" type="button">跳过引导</button>
+    </div>
+    <div class="wizdots" id="wizDots" aria-hidden="true"></div>
+    <div class="hr" style="margin:1.1rem 0"></div>
+
+    <!-- ① 欢迎 -->
+    <div class="wizstep" data-step="0">
+      <h2 id="wizTitle">欢迎使用 fnlrc</h2>
+      <p class="body" style="margin-top:.9rem;font-size:1rem">
+        它把「只有原语言、单行显示、刮错、乱码、没歌词」变成
+        <strong style="color:#fff;font-weight:600">原文 + 译文双行</strong>。
+      </p>
+      <p class="note" style="margin-top:1.2rem">
+        接下来两步，带你完成两件必做的事：<b>填访问令牌</b>（如果这台服务不是从本机打开的）、
+        <b>选音乐库</b>。默认只预览、不写入，确认之后再动手。
+      </p>
+      <div class="row" style="margin-top:1.8rem">
+        <button class="btn btn-primary btn-lg" id="wizStart" type="button">开始</button>
+      </div>
+    </div>
+
+    <!-- ② 访问令牌 -->
+    <div class="wizstep" data-step="1" hidden>
+      <h2>需要访问令牌</h2>
+      <p class="note" style="margin:1rem 0 1.4rem">
+        这个服务不是从本机打开的，所以不会自动带上令牌。在服务器上执行下面这条命令拿到它：
+        <br><br><span class="mono" style="color:#fff">docker logs fnlrc 2&gt;&amp;1 | grep -i token</span>
+        <br>或 <span class="mono" style="color:#fff">fnlrc token</span>
+      </p>
+      <label class="field"><span>访问令牌</span>
+        <input type="password" id="wizToken" autocomplete="off"></label>
+      <p class="small" style="margin-bottom:1.2rem" id="wizTokenMsg">
+        令牌与 API key 同等重要 —— 拿到它就能触发扫描和写入。它只存在这台浏览器里。
+      </p>
+      <div class="row">
+        <button class="btn btn-outline" id="wizBack1" type="button">上一步</button>
+        <button class="btn btn-primary" id="wizVerify" type="button">验证并继续</button>
+      </div>
+    </div>
+
+    <!-- ③ 选库 -->
+    <div class="wizstep" data-step="2" hidden>
+      <h2>选择音乐库</h2>
+      <p class="note" style="margin:1rem 0 1.4rem">
+        填一个要补完歌词的音乐目录，先扫一次看看有多少歌。<b>只读、不写入、不联网</b>。
+        网页版填挂载进容器的路径。
+      </p>
+      <label class="field"><span>音乐库路径</span>
+        <input type="text" id="wizRoot" placeholder="\\NAS\音乐  或  /music"
+               autocomplete="off" spellcheck="false"></label>
+      <div class="row">
+        <button class="btn btn-secondary" id="wizBrowse" type="button">浏览…</button>
+        <button class="btn btn-outline" id="wizScan" type="button">扫描</button>
+      </div>
+      <p class="small" style="margin:1rem 0;min-height:1.2rem" id="wizMsg"></p>
+      <div class="row">
+        <button class="btn btn-outline" id="wizBack2" type="button">上一步</button>
+        <button class="btn btn-primary" id="wizDone" type="button">完成，开始使用</button>
+        <span class="small">也可以先扫描，再点完成。</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module" src="/js/main.js"></script>

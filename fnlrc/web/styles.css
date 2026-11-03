@@ -226,6 +226,15 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
       color:rgba(255,255,255,.6);line-height:1.7}
 .empty{padding:2.5rem 1rem;text-align:center;color:rgba(255,255,255,.45);font-size:.875rem}
 
+/* ── 首次使用引导（欢迎 → 令牌 → 选库）──────────────────────── */
+.sheet.wiz{max-width:36rem}
+.wizdots{display:flex;gap:.6rem;margin-top:1rem;flex-wrap:wrap}
+.wizdot{font-size:.75rem;letter-spacing:.04em;padding:.3rem .8rem;border-radius:var(--radius-full);
+        border:1px solid var(--line);color:rgba(255,255,255,.5)}
+.wizdot[data-done="true"]{border-color:#fff;color:#fff}
+.wizdot[aria-current="true"]{background:#fff;color:#000;border-color:#fff}
+.wizstep h2{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+
 .toast{position:fixed;left:50%;bottom:2rem;transform:translate(-50%,150%);z-index:80;
        background:#fff;color:#000;font-size:.875rem;font-weight:600;
        padding:.75rem 1.4rem;border-radius:var(--radius-full);

@@ -210,6 +210,7 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | `GET` | `/` | 返回 `web/index.html`（**回环访问时注入访问令牌**） | — |
 | `GET` | `/styles.css`、`/js/*` | 静态资源（前端是多文件，见 UI-SPEC §5） | — |
 | `GET` | `/api/version` | 版本、可用的翻译后端 | — |
+| `GET` | `/api/auth` | **只读的令牌校验点**：令牌 + 同源校验（与写操作同一口径），无副作用。首次引导用它确认令牌 | ✅ |
 | `POST` | `/api/scan` | `{root, limit?}` → 库统计（总数、已有双语、缺歌词、乱码、纯音乐、按目录分布） | — |
 | `POST` | `/api/preview` | `{root, limit?}` → 每首歌的**静态判定**（`decide()`，不联网、秒回） | — |
 | `POST` | `/api/run` | `{root, write, force, translate, keep_local?, limit?, only?}` → `{job_id}`，后台线程执行。`only` 是路径子串过滤，与 `limit` 一起用时**先筛后截** | ✅ |
@@ -219,7 +220,7 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | `POST` | `/api/jobs/{id}/stop` | 优雅停止（当前曲处理完即停） | ✅ |
 | `GET` | `/api/report/{id}?status=&format=csv` | 结果列表，支持按状态筛选与 CSV 导出 | — |
 | `POST` | `/api/rollback` | `{files: [...]}` → 从 `.bak` 恢复 | ✅ |
-| `GET` | `/api/config` | 当前配置。**绝不回显 API key**，只给 `remote_configured` + `remote_key_masked` | — |
+| `GET` | `/api/config` | 当前配置。**绝不回显 API key**，只给 `remote_configured` + `remote_key_masked`；含 `setup_needed` 供前端判断是否走引导 | — |
 | `POST` | `/api/config` | 更新配置。`remote_api_key: "••••"` 表示"不修改" | ✅ |
 | `POST` | `/api/test-remote` | 验证 Base URL / key / 模型名，返回**可区分的原因**（错 key / 余额不足 / 模型名错 / 限流） | ✅ |
 | `GET` | `/api/fs?path=` | 目录浏览（网页版选目录用；桌面版走原生对话框） | — |

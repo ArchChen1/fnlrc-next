@@ -200,6 +200,56 @@ def test_config白名单(tmp_path, monkeypatch):
     assert "evil_field" not in raw and "password" not in raw
 
 
+# ---------------------------------------------------------------- 首次使用引导（M1 前置）
+def test_全新环境需要引导(tmp_path, monkeypatch):
+    """没有 config.json、没扫过库 → 需要走引导。"""
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path / "fresh"))
+    assert store.setup_needed() is True
+
+
+def test_配置损坏需要引导(tmp_path, monkeypatch):
+    """config.json 存在但读不出来（损坏）→ 重走引导，顺便自动修复。"""
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path))
+    store.config_path().write_text("{ not json", encoding="utf-8")
+    assert store.config_error() is True
+    assert store.setup_needed() is True
+
+
+def test_已有last_root不需要引导(tmp_path, monkeypatch):
+    """扫过库（有 last_root）→ 属于老用户，不打扰。"""
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path))
+    store.save_config({"last_root": "/music"})
+    assert store.setup_needed() is False
+
+
+def test_标记完成后不再引导(tmp_path, monkeypatch):
+    """点过「完成」/「跳过」→ 记 setup_done，之后即使没配置也不再引导。"""
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path / "fresh"))
+    store.save_config({"setup_done": True, "setup_version": 1})
+    assert store.setup_needed() is False
+
+
+def test_config接口暴露setup_needed(client):
+    d = client.get("/api/config").json()
+    assert d["setup_needed"] is True          # 全新环境
+
+
+def test_auth校验端点要令牌且无副作用(client, auth):
+    """令牌对 → 200；不对 / 缺失 → 401（与写操作同一套守卫）。"""
+    assert client.get("/api/auth").status_code == 401
+    assert client.get("/api/auth", headers={"X-FNLRC-Token": "wrong"}).status_code == 401
+    r = client.get("/api/auth", headers=auth)
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+
+def test_auth不写入任何配置(client, auth):
+    """校验端点必须只读 —— 它会在引导里被反复调用，不能有副作用。"""
+    store.save_config({"last_root": "/music"})
+    before = store.load_config()
+    client.get("/api/auth", headers=auth)
+    assert store.load_config() == before
+
+
 def test_config损坏时返回空而不是崩(tmp_path, monkeypatch):
     monkeypatch.setenv("FNLRC_DATA", str(tmp_path))
     store.config_path().write_text("{ not json", encoding="utf-8")

@@ -85,15 +85,12 @@ function browse() {
 async function startScan() {
   const root = $("#root").value.trim();
   if (!root) { toast("先填一个音乐库路径"); return; }
-  S.root = root;
-  localStorage.setItem("fnlrc_root", root);
 
   const btn = $("#doScan");
   btn.disabled = true; btn.textContent = "扫描中…";
   try {
     const d = await api("/api/scan", { root });
-    S.summary = d.summary;
-    renderSummary(d.summary);
+    adoptScanned(root, d.summary);
     go(1);
   } catch (e) {
     toast("扫描失败：" + e.message);
@@ -102,7 +99,20 @@ async function startScan() {
   }
 }
 
-function renderSummary(s) {
+/**
+ * 接管一次成功的扫描：写回主界面、记住状态并渲染概览。
+ * 首次使用引导（wizard.js）复用它 —— 引导里扫到的库直接进主界面，用户不用再扫一遍。
+ */
+export function adoptScanned(root, summary) {
+  S.root = root;
+  S.summary = summary;
+  localStorage.setItem("fnlrc_root", root);
+  const input = $("#root");
+  if (input) input.value = root;
+  renderSummary(summary, root);
+}
+
+function renderSummary(s, root) {
   const need = s.mono_or_single + s.missing + s.broken;
   const tiles = [["音频总数", s.total], ["已有双语", s.bilingual],
                  ["需要补完", need], ["纯音乐跳过", s.instrumental]];
@@ -118,7 +128,7 @@ function renderSummary(s) {
   }).join("") || `<tr><td colspan="6"><div class="empty">
       这个文件夹里没找到音频文件。支持 mp3/flac/m4a/wav/ogg/ape 等。</div></td></tr>`;
 
-  $("#scanNote").textContent = `${tops.length} 个目录 · ${S.root}`;
+  $("#scanNote").textContent = `${tops.length} 个目录 · ${root || S.root}`;
 }
 
 /* ─────────────────────────────────────────── ③ 预览 */

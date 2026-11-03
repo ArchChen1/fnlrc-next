@@ -36,8 +36,13 @@ CONFIG_KEYS = (
     "deadline_s",
     "translate_deadline_s",
     "last_root",
+    # 首次使用引导（M1 前置）用：点过「完成」或「跳过」后置真，之后不再打扰
+    "setup_done",
+    "setup_version",
 )
 SECRET_KEYS = ("remote_api_key",)
+# 引导口径的版本号。将来引导流程大改（新增步骤）时可抬高它，让老用户再走一次。
+SETUP_VERSION = 1
 # 设置页用这个占位符表示"不修改"，而不是把真 key 回传再收回来
 UNCHANGED = "••••"
 
@@ -84,6 +89,34 @@ def load_config() -> dict:
     except Exception:
         return {}
     return {k: v for k, v in raw.items() if k in CONFIG_KEYS}
+
+
+def config_error() -> bool:
+    """config.json **存在但读不出来**（损坏）时为 True；文件不在不算。"""
+    p = config_path()
+    if not p.is_file():
+        return False
+    try:
+        json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return True
+    return False
+
+
+def setup_needed() -> bool:
+    """首次使用引导要不要走。
+
+    判定「全新环境」的口径（缺一不可地按顺序判）：
+    1. 显式标记过完成（``setup_done``）→ 不需要，永不打扰
+    2. 配置文件**损坏** → 需要（多半是被手工改坏，重走一遍顺便自动修复）
+    3. 从没扫描过任何库（无 ``last_root``）→ 需要（全新安装）
+    4. 其余（有 last_root 等有效配置）→ 不需要
+    """
+    if load_config().get("setup_done"):
+        return False
+    if config_error():
+        return True
+    return not load_config().get("last_root")
 
 
 def save_config(patch: dict) -> dict:
