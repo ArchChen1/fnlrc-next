@@ -197,28 +197,42 @@
 
       <!-- 自动监测专用：监听目录与搬运方式。立即执行模式下隐藏（它不监测）。 -->
       <div class="dashCard rv d300" id="autoWatch" style="margin-top:1.2rem" hidden>
-        <p class="eyebrow" style="margin:0 0 .8rem" data-i18n="auto.watch_title">监听目录</p>
+        <p class="eyebrow" style="margin:0 0 .8rem" data-i18n="auto.watch_title">监听</p>
         <p class="note" style="margin:0 0 1rem" data-i18n="auto.watch_note">
-          盯着这个目录，新歌下进来就自动补完。它和上面的音乐库路径是两回事：库是「补哪些歌」，
-          这里是「从哪儿等新歌」。默认只预览不写，勾上「直接写入」才会改你的文件。
+          留空就监听上面的音乐库。默认只预览不写，勾上「直接写入」才会改你的文件。
         </p>
         <label class="field"><span data-i18n="settings.watch_root">监听目录</span>
           <input type="text" id="autoWatchRoot" placeholder="/music/inbox  或  \\NAS\下载\待整理"
                  autocomplete="off" spellcheck="false"></label>
+        <p class="small" id="autoWatchHint" style="margin:-.5rem 0 1rem"></p>
+
         <div class="grid g2">
           <label class="field"><span data-i18n="settings.watch_after">补完后</span>
             <select id="autoWatchAfter">
               <option value="keep" data-i18n="settings.watch_after_keep">留在原地（只写歌词文件）</option>
-              <option value="copy" data-i18n="settings.watch_after_copy">复制到音乐库</option>
-              <option value="move" data-i18n="settings.watch_after_move">移动到音乐库</option>
+              <option value="copy" data-i18n="settings.watch_after_copy">复制到目的音乐库目录</option>
+              <option value="move" data-i18n="settings.watch_after_move">移动到目的音乐库目录</option>
             </select></label>
-          <label class="field"><span data-i18n="settings.watch_move_to">音乐库目录（复制/移动时用）</span>
+          <!-- 只有复制/移动才需要目的地；留空就藏起来，免得填了却不生效 -->
+          <label class="field" id="autoMoveToField" hidden>
+            <span data-i18n="auto.move_to_label">目的音乐库目录</span>
             <input type="text" id="autoWatchMoveTo" placeholder="/music/我的音乐"
                    autocomplete="off" spellcheck="false"></label>
         </div>
+
         <label class="row checkline" style="margin-top:.6rem">
           <input type="checkbox" id="autoWatchWrite">
           <span data-i18n-html="settings.watch_write">直接写入旁挂 <span class="mono">.lrc</span>（不勾则只预览到输出目录）</span>
+        </label>
+        <div class="grid g2" style="margin-top:.8rem">
+          <label class="field"><span data-i18n="settings.watch_quiet">静默几秒后才处理（防半截文件）</span>
+            <input type="number" id="autoWatchQuiet" min="1" max="600" step="1"></label>
+          <label class="field"><span data-i18n="settings.watch_poll">轮询间隔秒</span>
+            <input type="number" id="autoWatchPoll" min="1" max="600" step="1"></label>
+        </div>
+        <label class="row checkline" style="margin-top:.6rem">
+          <input type="checkbox" id="autoWatchAutostart">
+          <span data-i18n="settings.watch_autostart">服务启动时自动开始监听</span>
         </label>
       </div>
 
@@ -352,34 +366,11 @@
     </p>
 
     <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.watch_section">监听文件夹</p>
+    <p class="eyebrow" data-i18n="settings.watch_section">监听</p>
     <p class="note" style="margin:.8rem 0 1rem" data-i18n-html="settings.watch_note">
-      新歌下进来就自动补完。默认<b>只预览不写</b>，且只处理看起来已下完的文件。
+      监听目录、补完后怎么处理等设置，都在首页的「自动监测」里填 —— 那里能顺便看到运行状态。
+      这里只留开关。
     </p>
-    <label class="field"><span data-i18n="settings.watch_root">监听目录</span>
-      <input type="text" id="watchRoot" placeholder="/music/inbox  或  \\NAS\下载\待整理"
-             autocomplete="off" spellcheck="false"></label>
-    <div class="grid g2">
-      <label class="field"><span data-i18n="settings.watch_after">补完后</span>
-        <select id="watchAfter">
-          <option value="keep" data-i18n="settings.watch_after_keep">留在原地（只写歌词文件）</option>
-          <option value="copy" data-i18n="settings.watch_after_copy">复制到音乐库</option>
-          <option value="move" data-i18n="settings.watch_after_move">移动到音乐库</option>
-        </select></label>
-      <label class="field"><span data-i18n="settings.watch_move_to">音乐库目录（复制/移动时用）</span>
-        <input type="text" id="watchMoveTo" placeholder="/music/我的音乐"
-               autocomplete="off" spellcheck="false"></label>
-    </div>
-    <label class="row checkline" style="margin-top:1rem">
-      <input type="checkbox" id="watchWrite">
-      <span data-i18n-html="settings.watch_write">直接写入旁挂 <span class="mono">.lrc</span>（不勾则只预览到输出目录）</span>
-    </label>
-    <div class="grid g2" style="margin-top:.8rem">
-      <label class="field"><span data-i18n="settings.watch_quiet">静默几秒后才处理（防半截文件）</span>
-        <input type="number" id="watchQuiet" min="1" max="600" step="1"></label>
-      <label class="field"><span data-i18n="settings.watch_poll">轮询间隔秒</span>
-        <input type="number" id="watchPoll" min="1" max="600" step="1"></label>
-    </div>
     <label class="row checkline" style="margin-top:.6rem">
       <input type="checkbox" id="watchAutostart">
       <span data-i18n="settings.watch_autostart">服务启动时自动开始监听</span>

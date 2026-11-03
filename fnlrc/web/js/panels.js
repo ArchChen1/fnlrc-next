@@ -248,15 +248,10 @@ function applyConfig(c) {
   applyWatchConfig(c.watch || {}, !!c.watch_running);
 }
 
-/** 监听设置区：先用服务端存的值回填，再按运行状态刷按钮。 */
+/** 监听设置区：回填 autostart，再按运行状态刷按钮。 */
 function applyWatchConfig(w, running) {
-  $("#watchRoot").value = w.watch_root || "";
-  $("#watchAfter").value = w.watch_after || "keep";
-  $("#watchMoveTo").value = w.watch_move_to || "";
-  $("#watchWrite").checked = w.watch_write !== false;
-  $("#watchQuiet").value = w.watch_quiet_s != null ? w.watch_quiet_s : 8;
-  $("#watchPoll").value = w.watch_poll_s != null ? w.watch_poll_s : 5;
-  $("#watchAutostart").checked = !!w.watch_autostart;
+  const auto = $("#watchAutostart");
+  if (auto) auto.checked = !!w.watch_autostart;
   setWatchRunning(running);
   if (running) openWatchStream();   // 刷新页面后，若服务端还在监听就重连事件流
 }
@@ -270,16 +265,13 @@ function setWatchRunning(running) {
   if (st) st.style.color = running ? "#5eead4" : "";
 }
 
+/**
+ * 设置面板只保留「服务启动时自动开始监听」这一项。
+ * 监听目录 / 补完后 / 静默秒数等全在首页的自动监测里填 —— 那里能顺便看到状态，
+ * 两处都能改的话会出现「改了一个、另一个又发回去盖掉」的问题。
+ */
 function watchPatch() {
-  return {
-    watch_root: $("#watchRoot").value.trim(),
-    watch_after: $("#watchAfter").value,
-    watch_move_to: $("#watchMoveTo").value.trim(),
-    watch_write: $("#watchWrite").checked,
-    watch_quiet_s: parseInt($("#watchQuiet").value, 10) || 8,
-    watch_poll_s: parseInt($("#watchPoll").value, 10) || 5,
-    watch_autostart: $("#watchAutostart").checked
-  };
+  return { watch_autostart: !!$("#watchAutostart")?.checked };
 }
 
 async function saveWatch() {
@@ -309,8 +301,10 @@ async function toggleWatch() {
       openWatchStream();
     }
   } catch (e) {
-    if (st) { st.textContent = "❌ " + e.message; st.style.color = ""; }
-    toast(e.message);
+    // 监听目录等设置已经挪到首页的「自动监测」里了。这里失败多半是那边还没填，
+    // 所以直接把话说清楚、并把人送过去，而不是只丢一句服务端报错。
+    if (st) { st.textContent = t("settings.watch_need_auto"); st.style.color = ""; }
+    toast(t("settings.watch_need_auto"));
   } finally {
     btn.disabled = false;
   }

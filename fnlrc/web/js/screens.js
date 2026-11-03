@@ -127,25 +127,66 @@ export function applyMode() {
   syncTabLocks();
 }
 
-/** 把服务端已存的监听配置回填到自动监测那一段（进入流程时读一次）。 */
+/**
+ * 把服务端已存的监听配置回填到自动监测那一段（进入流程时读一次）。
+ *
+ * 监听目录刻意**留空显示**：留空 = 跟着选库走，这是默认行为。
+ * 只有当它确实和音乐库不同（用户特意指定了别的目录）时才回显。
+ */
 function fillAutoWatch() {
   const w = (S.config && S.config.watch) || {};
+  const same = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+  const root = w.watch_root || "";
+  const rootInput = $("#autoWatchRoot");
+  if (rootInput) rootInput.value = same(root, S.root) ? "" : root;
+
   const set = (id, v) => { const el = $(id); if (el) el.value = v == null ? "" : v; };
-  set("#autoWatchRoot", w.watch_root || "");
   set("#autoWatchMoveTo", w.watch_move_to || "");
   const after = $("#autoWatchAfter");
   if (after) after.value = w.watch_after || "keep";
   const wr = $("#autoWatchWrite");
   if (wr) wr.checked = w.watch_write !== false;
+  const quiet = $("#autoWatchQuiet");
+  if (quiet) quiet.value = w.watch_quiet_s != null ? w.watch_quiet_s : 8;
+  const poll = $("#autoWatchPoll");
+  if (poll) poll.value = w.watch_poll_s != null ? w.watch_poll_s : 5;
+  const auto = $("#autoWatchAutostart");
+  if (auto) auto.checked = !!w.watch_autostart;
+
+  syncAutoWatchUI();
 }
 
-/** 读回自动监测那一段的表单值 */
+/** 目的地只在复制/移动时才有意义；监听目录留空时给一句说明。 */
+export function syncAutoWatchUI() {
+  const after = $("#autoWatchAfter");
+  const field = $("#autoMoveToField");
+  // 用内联样式而不是 hidden 属性：label.field{display:block} 会压过 [hidden]
+  if (field) {
+    const show = !!(after && (after.value === "copy" || after.value === "move"));
+    field.hidden = !show;
+    field.style.display = show ? "" : "none";
+  }
+
+  const hint = $("#autoWatchHint");
+  if (hint) {
+    const typed = ($("#autoWatchRoot")?.value || "").trim();
+    hint.textContent = typed
+      ? t("auto.root_custom")
+      : (S.root ? t("auto.root_default", { root: S.root }) : t("auto.root_no_lib"));
+  }
+}
+
+/** 读回自动监测那一段的表单值。监听目录留空 → 用选库选的音乐库。 */
 export function autoWatchPatch() {
+  const typed = ($("#autoWatchRoot")?.value || "").trim();
   return {
-    watch_root: ($("#autoWatchRoot")?.value || "").trim(),
+    watch_root: typed || S.root || "",
     watch_after: $("#autoWatchAfter")?.value || "keep",
     watch_move_to: ($("#autoWatchMoveTo")?.value || "").trim(),
-    watch_write: !!$("#autoWatchWrite")?.checked
+    watch_write: !!$("#autoWatchWrite")?.checked,
+    watch_quiet_s: parseInt($("#autoWatchQuiet")?.value, 10) || 8,
+    watch_poll_s: parseInt($("#autoWatchPoll")?.value, 10) || 5,
+    watch_autostart: !!$("#autoWatchAutostart")?.checked
   };
 }
 
@@ -258,6 +299,10 @@ export function initPreview() {
   $("#doPreview").addEventListener("click", doPreview);
   $("#doRun").addEventListener("click", doRun);
   $("#doStop").addEventListener("click", doStop);
+
+  // 自动监测那段：目的地字段随「补完后」显隐；监听目录留空时提示会用它监听哪个库
+  $("#autoWatchAfter")?.addEventListener("change", syncAutoWatchUI);
+  $("#autoWatchRoot")?.addEventListener("input", syncAutoWatchUI);
 }
 
 /** 当前降级链（有序）。空 = 还没配过，用默认值 */
@@ -551,7 +596,7 @@ function setProgress(done, total, labelKey) {
  *
  * 自动监测复用前 3 步收集配置，然后：
  *   1. **持久化**（这是它与「立即执行」的关键区别）；
- *   2. 把选库路径同时设为监听目录的来源 —— 监听配置仍是设置面板里那一份；
+ *   2. 监听目录留空时，用选库选的音乐库 —— 少填一次、也少一个概念；
  *   3. 启动监听，然后回 dashboard 看状态条。
  *
  * 它不写任何音乐文件：写入由监听在真正发现新歌时决定。
@@ -561,12 +606,19 @@ async function runAuto() {
   btn.disabled = true;
   const old = btn.textContent;
   try {
-    // 监听目录必填 —— 否则「保存并开始监测」只会换来一句报错，白跑一趟
+    // 监听目录留空是允许的（= 监听选库选的音乐库），但两者都空就没法开始
     const watch = autoWatchPatch();
     if (!watch.watch_root) {
       toast(t("auto.need_watch_root"));
-      const box = $("#autoWatchRoot");
-      if (box) { go(2); box.focus(); }
+      go(0);
+      $("#root")?.focus();
+      return;
+    }
+    // 复制/移动却没填目的地 —— 服务端会拒，不如在这儿先说清楚
+    if ((watch.watch_after === "copy" || watch.watch_after === "move")
+        && !watch.watch_move_to) {
+      toast(t("auto.need_move_to"));
+      $("#autoWatchMoveTo")?.focus();
       return;
     }
 

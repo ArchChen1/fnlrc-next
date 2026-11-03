@@ -126,6 +126,8 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
        /* 切 Tab 时对齐到面板顶部；留出吸顶栏的高度，别被它盖住 */
        scroll-margin-top:4.5rem}
 .panel[hidden]{display:none}
+/* 兜底：任何带 class 的元素（如 label.field{display:block}）被 hidden 时也要真的藏起来 */
+[hidden]{display:none!important}
 @media(min-width:768px){.panel{padding:3rem 2rem 4rem}}
 @media(min-width:1024px){.panel{padding:3.5rem 3rem 4rem}}
 
