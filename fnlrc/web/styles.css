@@ -38,7 +38,12 @@
 }
 
 *,*::before,*::after{box-sizing:border-box}
-html{scroll-behavior:smooth}
+/*
+  scrollbar-gutter:stable —— 永远为滚动条预留位置。
+  否则首页有滚动条、抽屉（body overflow:hidden）没有，可用宽度差一条滚动条的宽度（实测 15px），
+  顶栏右边那组按钮会跟着左右横跳。
+*/
+html{scroll-behavior:smooth;scrollbar-gutter:stable}
 body{margin:0;background:var(--bg-primary);color:var(--text);
      font-family:var(--sans);-webkit-font-smoothing:antialiased}
 
@@ -274,11 +279,25 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .log .bad{color:var(--bad)}.log .dim{color:rgba(255,255,255,.45)}
 
 /* ── 顶栏 / Tab 条 ───────────────────────────────────────── */
+/*
+  高度**写死**，不靠内容撑。
+  早先是 padding + 内容自然撑高：首页没有 Tab 条、流程页有，两者行高不同，
+  顶栏就差了几个像素，右上的「报告/设置/历史」跟着上下跳。
+  现在固定 height（手机 / 桌面各一档），内部一律 align-items:center 垂直居中。
+
+  另注意 html 上的 scrollbar-gutter:stable —— 没有它，首页有滚动条、抽屉没有，
+  可用宽度差一条滚动条，右侧按钮仍会横跳十几像素（实测 15.33px）。
+*/
 .topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;
-        justify-content:space-between;gap:1rem;padding:1rem 1.5rem;
+        justify-content:space-between;gap:1rem;padding:0 1.5rem;
+        height:var(--topbar-h);
         background:rgba(0,0,0,.88);backdrop-filter:blur(12px);
         border-bottom:1px solid var(--line-soft)}
-@media(min-width:768px){.topbar{padding:1.1rem 3rem}}
+@media(min-width:768px){.topbar{padding:0 3rem}}
+/* 右上一组按钮：高度与行高统一，避免基线不同导致的高低差 */
+.topbar>.row{gap:.25rem;align-items:center;flex:none}
+.topbar .brand,.topbar .tab,.topbar .btn-ghost,.topbar .backbtn{
+  line-height:1;display:inline-flex;align-items:center}
 .brand{font-weight:700;letter-spacing:-.01em;font-size:1rem;white-space:nowrap}
 .brand em{font-style:normal;color:rgba(255,255,255,.45);font-weight:400;
           margin-left:.6rem;font-size:.8125rem}
@@ -339,9 +358,47 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 @media(min-width:768px){.sheet{padding:2.5rem}}
 .sheet h2{margin:0 0 .35rem;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
 .hr{height:1px;background:var(--line-soft);margin:1.5rem 0}
-.note{border-left:2px solid var(--line);padding-left:.9rem;font-size:.8125rem;
-      color:rgba(255,255,255,.6);line-height:1.7}
 .empty{padding:2.5rem 1rem;text-align:center;color:rgba(255,255,255,.45);font-size:.875rem}
+
+/*
+  ── 设置面板：固定头部 + 左导航 + 右内容 ─────────────────────
+  这是绝大多数桌面软件的设置弹窗版式：头部（标题 / 关闭）永远不动，
+  左侧一列分类，右侧只滚内容。面板高度锁定，不随内容长短变形。
+*/
+.sheet--nav{max-width:54rem;max-height:min(86dvh,44rem);
+            padding:0;overflow:hidden;display:flex;flex-direction:column}
+.setHead{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+         flex:none;padding:1.15rem 1.5rem;border-bottom:1px solid var(--line)}
+.setHead h2{margin:0}
+.setHead .row{gap:.5rem;flex:none}
+.setHead .btn{flex:none;padding:.6rem 1.3rem;font-size:.875rem}
+.setBody{flex:1 1 auto;display:flex;min-height:0}   /* min-height:0 才允许子项内部滚动 */
+
+.setNav{flex:none;width:12rem;display:flex;flex-direction:column;gap:.15rem;
+        padding:1rem .75rem;overflow-y:auto;
+        border-right:1px solid var(--line);background:rgba(255,255,255,.02)}
+.setNavItem{appearance:none;border:0;background:transparent;cursor:pointer;
+            font:inherit;font-size:.875rem;font-weight:600;text-align:left;
+            color:rgba(255,255,255,.6);padding:.65rem .9rem;
+            border-radius:var(--radius-full);white-space:nowrap;
+            transition:background-color .2s,color .2s}
+.setNavItem:hover{color:#fff;background:rgba(255,255,255,.08)}
+.setNavItem[aria-current="true"]{background:#fff;color:#000}
+.setNavItem:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+.setPanes{flex:1 1 auto;min-width:0;overflow-y:auto;padding:1.5rem 1.75rem 2rem}
+.setPaneTitle{margin:0;font-size:1.0625rem;font-weight:700;letter-spacing:-.01em}
+
+/* 窄屏：导航改成顶部横排（横向滚），内容在下 —— 竖排侧栏在手机上太挤 */
+@media(max-width:820px){
+  .sheet--nav{max-height:92dvh}
+  .setBody{flex-direction:column}
+  .setNav{width:auto;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+          gap:.25rem;padding:.6rem .75rem;border-right:0;
+          border-bottom:1px solid var(--line)}
+  .setNavItem{flex:none;padding:.5rem .85rem;font-size:.8125rem}
+  .setPanes{padding:1.15rem 1.15rem 1.6rem}
+}
 
 /* ── 首次使用引导（欢迎 → 令牌 → 选库）──────────────────────── */
 .sheet.wiz{max-width:36rem}

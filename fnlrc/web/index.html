@@ -310,115 +310,134 @@
 
 </div>
 
-<!-- 设置面板（覆盖式，不参与 Tab 叙事） -->
+<!-- 设置面板（覆盖式，不参与 Tab 叙事）
+     版式：固定头部（标题 + 关闭）+ 左侧分类导航 + 右侧内容区。
+     内容区独立滚动，头部永远不动 —— 面板再长也看得见「关闭」。 -->
 <div class="overlay" id="settings">
-  <div class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between">
+  <div class="sheet sheet--nav" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <header class="setHead">
       <h2 id="setTitle" data-i18n="settings.title">设置</h2>
-      <button class="btn-ghost" data-close="settings" type="button" data-i18n="common.close">关闭 ✕</button>
-    </div>
+      <div class="row">
+        <button class="btn btn-primary" id="saveSettings" type="button" data-i18n="settings.save">保存</button>
+        <button class="btn btn-outline" data-close="settings" type="button" data-i18n="common.close">关闭</button>
+      </div>
+    </header>
 
-    <p class="small" style="margin:.6rem 0 0" data-i18n="settings.help">
-      每一项的详细说明见 docs/使用教程.md 的「设置」一节。
-    </p>
+    <div class="setBody">
+      <nav class="setNav" id="setNav" aria-label="设置分类">
+        <button class="setNavItem" type="button" data-pane="lang" aria-current="true" data-i18n="settings.language">界面语言</button>
+        <button class="setNavItem" type="button" data-pane="api" data-i18n="settings.api_section">我的 API</button>
+        <button class="setNavItem" type="button" data-pane="library" data-i18n="settings.library_section">音乐库</button>
+        <button class="setNavItem" type="button" data-pane="watch" data-i18n="settings.watch_section">监听</button>
+        <button class="setNavItem" type="button" data-pane="other" data-i18n="settings.other_section">其它</button>
+        <button class="setNavItem" type="button" data-pane="fnos" data-i18n="settings.fnos_section">回填到飞牛</button>
+      </nav>
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.language">界面语言</p>
-    <div class="row" style="margin-top:1rem;align-items:center">
-      <select id="cfgLang" style="max-width:12rem"></select>
-      <span class="small" data-i18n="settings.language.hint">只影响界面显示。导出的数据与语言无关。</span>
-    </div>
+      <div class="setPanes" id="setPanes">
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.api_section">我的 API · DeepSeek</p>
-    <p class="note" id="keyState" style="margin:.8rem 0 1.2rem"></p>
-    <label class="field"><span data-i18n="settings.api_key">API Key</span>
-      <input type="password" id="cfgKey" placeholder="sk-…" autocomplete="off"></label>
-    <div class="grid g2">
-      <label class="field"><span data-i18n="settings.base_url">Base URL</span>
-        <input type="text" id="cfgBase" placeholder="https://api.deepseek.com"></label>
-      <label class="field"><span data-i18n="settings.model">模型名</span>
-        <input type="text" id="cfgModel" placeholder="deepseek-flash"></label>
-    </div>
-    <div class="row">
-      <button class="btn btn-outline" id="testRemote" type="button" data-i18n="settings.test">测试连接</button>
-      <span class="small" id="testResult"></span>
-    </div>
-    <p class="note" style="margin-top:1rem" data-i18n-html="settings.api_note">
-      只有源站没给译文的行会发出去翻译；选「源站译词」完全不出网。
-    </p>
+        <section class="setPane" data-pane="lang">
+          <h3 class="setPaneTitle" data-i18n="settings.language">界面语言</h3>
+          <div class="row" style="margin-top:1rem;align-items:center">
+            <select id="cfgLang" style="max-width:12rem"></select>
+            <span class="small" data-i18n="settings.language.hint">只影响界面显示。导出的数据与语言无关。</span>
+          </div>
+        </section>
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.library_section">音乐库</p>
-    <div class="row" style="margin-top:1rem">
-      <button class="btn btn-outline" id="testWrite" type="button" data-i18n="settings.test_write">测试写入权限</button>
-      <button class="btn btn-outline" id="rotateToken" type="button" data-i18n="settings.rotate_token">重置访问令牌</button>
-      <span class="small" id="writeResult"></span>
-    </div>
-    <p class="note" style="margin-top:1rem" data-i18n-html="settings.write_note">
-      会建一个临时文件再删掉，库内不留东西。
-    </p>
+        <section class="setPane" data-pane="api" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.api_section">我的 API · DeepSeek</h3>
+          <p class="note" id="keyState" style="margin:.8rem 0 1.2rem"></p>
+          <label class="field"><span data-i18n="settings.api_key">API Key</span>
+            <input type="password" id="cfgKey" placeholder="sk-…" autocomplete="off"></label>
+          <div class="grid g2">
+            <label class="field"><span data-i18n="settings.base_url">Base URL</span>
+              <input type="text" id="cfgBase" placeholder="https://api.deepseek.com"></label>
+            <label class="field"><span data-i18n="settings.model">模型名</span>
+              <input type="text" id="cfgModel" placeholder="deepseek-flash"></label>
+          </div>
+          <div class="row">
+            <button class="btn btn-outline" id="testRemote" type="button" data-i18n="settings.test">测试连接</button>
+            <span class="small" id="testResult"></span>
+          </div>
+          <p class="note" style="margin-top:1rem" data-i18n-html="settings.api_note">
+            只有源站没给译文的行会发出去翻译；选「源站译词」完全不出网。
+          </p>
+        </section>
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.watch_section">监听</p>
-    <p class="note" style="margin:.8rem 0 1rem" data-i18n-html="settings.watch_note">
-      监听目录、补完后怎么处理等设置，都在首页的「自动监测」里填 —— 那里能顺便看到运行状态。
-      这里只留开关。
-    </p>
-    <label class="row checkline" style="margin-top:.6rem">
-      <input type="checkbox" id="watchAutostart">
-      <span data-i18n="settings.watch_autostart">服务启动时自动开始监听</span>
-    </label>
-    <div class="row" style="margin-top:1rem">
-      <button class="btn btn-outline" id="watchSave" type="button" data-i18n="settings.watch_save">保存监听设置</button>
-      <button class="btn btn-secondary" id="watchToggle" type="button" data-i18n="settings.watch_start">开始监听</button>
-      <span class="small" id="watchState"></span>
-    </div>
-    <pre class="prebox" id="watchLog" style="margin-top:.9rem;max-height:12rem;overflow:auto"></pre>
+        <section class="setPane" data-pane="library" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.library_section">音乐库</h3>
+          <div class="row" style="margin-top:1.2rem">
+            <button class="btn btn-outline" id="testWrite" type="button" data-i18n="settings.test_write">测试写入权限</button>
+            <button class="btn btn-outline" id="rotateToken" type="button" data-i18n="settings.rotate_token">重置访问令牌</button>
+            <span class="small" id="writeResult"></span>
+          </div>
+          <p class="note" style="margin-top:1rem" data-i18n-html="settings.write_note">
+            会建一个临时文件再删掉，库内不留东西。
+          </p>
+        </section>
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.other_section">其它</p>
-    <label class="row checkline" style="margin-top:1rem">
-      <input type="checkbox" id="cfgBackup">
-      <span data-i18n-html="settings.backup">替换旧歌词前备份 <span class="mono">.lrc.bak</span></span>
-    </label>
-    <label class="row checkline" style="margin-top:.6rem">
-      <input type="checkbox" id="cfgKeepLocal" checked>
-      <span data-i18n="settings.keep_local">外文单语歌词：保留本地时间轴，只把译文插进去</span>
-    </label>
-    <p class="note" style="margin-top:.6rem" data-i18n-html="settings.keep_local_note">
-      沿用你文件里的时间轴与断句，只按相同时间戳补译文行。
-    </p>
-    <div class="row" style="margin-top:1.5rem">
-      <button class="btn btn-primary" id="saveSettings" type="button" data-i18n="settings.save">保存</button>
-    </div>
+        <section class="setPane" data-pane="watch" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.watch_section">监听</h3>
+          <p class="note" style="margin:1rem 0 1.2rem" data-i18n-html="settings.watch_note">
+            监听目录、补完后怎么处理等设置，都在首页的「自动监测」里填 —— 那里能顺便看到运行状态。
+            这里只留开关。
+          </p>
+          <label class="row checkline" style="margin-top:.6rem">
+            <input type="checkbox" id="watchAutostart">
+            <span data-i18n="settings.watch_autostart">服务启动时自动开始监听</span>
+          </label>
+          <div class="row" style="margin-top:1rem">
+            <button class="btn btn-outline" id="watchSave" type="button" data-i18n="settings.watch_save">保存监听设置</button>
+            <button class="btn btn-secondary" id="watchToggle" type="button" data-i18n="settings.watch_start">开始监听</button>
+            <span class="small" id="watchState"></span>
+          </div>
+          <pre class="prebox" id="watchLog" style="margin-top:.9rem;max-height:12rem;overflow:auto"></pre>
+        </section>
 
-    <div class="hr"></div>
-    <p class="eyebrow" data-i18n="settings.fnos_section">回填到飞牛（进阶）</p>
-    <p class="note" style="margin:.8rem 0 1rem" data-i18n-html="settings.fnos_note">
-      直接改写飞牛数据库里的歌词正文，保留 lyric_id（歌单、收藏、历史不受影响）。
-      服务端需开启 <span class="mono">FNLRC_ENABLE_FNOS_WRITE=1</span>，每次都会先备份。
-    </p>
-    <div class="grid g2">
-      <label class="field"><span data-i18n="settings.fnos_app_data">主库目录（music.db 所在）</span>
-        <input type="text" id="fnosAppData" placeholder="/fnos-data/appdata" autocomplete="off"></label>
-      <label class="field"><span data-i18n="settings.fnos_appmeta">歌词分片目录（lyric-sqlite 所在）</span>
-        <input type="text" id="fnosAppmeta" placeholder="/fnos-data/appmeta" autocomplete="off"></label>
+        <section class="setPane" data-pane="other" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.other_section">其它</h3>
+          <label class="row checkline" style="margin-top:1.2rem">
+            <input type="checkbox" id="cfgBackup">
+            <span data-i18n-html="settings.backup">替换旧歌词前备份 <span class="mono">.lrc.bak</span></span>
+          </label>
+          <label class="row checkline" style="margin-top:.6rem">
+            <input type="checkbox" id="cfgKeepLocal" checked>
+            <span data-i18n="settings.keep_local">外文单语歌词：保留本地时间轴，只把译文插进去</span>
+          </label>
+          <p class="note" style="margin-top:.6rem" data-i18n-html="settings.keep_local_note">
+            沿用你文件里的时间轴与断句，只按相同时间戳补译文行。
+          </p>
+        </section>
+
+        <section class="setPane" data-pane="fnos" hidden>
+          <h3 class="setPaneTitle" data-i18n="settings.fnos_section">回填到飞牛（进阶）</h3>
+          <p class="note" style="margin:1rem 0 1.2rem" data-i18n-html="settings.fnos_note">
+            直接改写飞牛数据库里的歌词正文，保留 lyric_id（歌单、收藏、历史不受影响）。
+            服务端需开启 <span class="mono">FNLRC_ENABLE_FNOS_WRITE=1</span>，每次都会先备份。
+          </p>
+          <div class="grid g2">
+            <label class="field"><span data-i18n="settings.fnos_app_data">主库目录（music.db 所在）</span>
+              <input type="text" id="fnosAppData" placeholder="/fnos-data/appdata" autocomplete="off"></label>
+            <label class="field"><span data-i18n="settings.fnos_appmeta">歌词分片目录（lyric-sqlite 所在）</span>
+              <input type="text" id="fnosAppmeta" placeholder="/fnos-data/appmeta" autocomplete="off"></label>
+          </div>
+          <label class="row checkline" style="margin:.4rem 0 .8rem">
+            <input type="checkbox" id="fnosAllowInsert">
+            <span data-i18n-html="settings.fnos_allow_insert">给<b>没有歌词</b>的歌新建歌词行</span>
+          </label>
+          <p class="note" style="margin:0 0 1rem" data-i18n-html="settings.fnos_allow_insert_note">
+            已有歌词的歌永远不会被新建（偏好表以 lyric_id 为键）。
+          </p>
+          <div class="row">
+            <button class="btn btn-outline" id="fnosProbe" type="button" data-i18n="settings.fnos_probe">① 检测结构</button>
+            <button class="btn btn-outline" id="fnosPreview" type="button" data-i18n="settings.fnos_preview">② 预览差异</button>
+            <button class="btn btn-secondary" id="fnosApply" type="button" disabled data-i18n="settings.fnos_apply">③ 执行回填</button>
+          </div>
+          <p class="note" id="fnosStatus" style="margin-top:.9rem"></p>
+          <pre class="prebox" id="fnosOut"></pre>
+        </section>
+
+      </div>
     </div>
-    <label class="row checkline" style="margin:.4rem 0 .8rem">
-      <input type="checkbox" id="fnosAllowInsert">
-      <span data-i18n-html="settings.fnos_allow_insert">给<b>没有歌词</b>的歌新建歌词行</span>
-    </label>
-    <p class="note" style="margin:0 0 1rem" data-i18n-html="settings.fnos_allow_insert_note">
-      已有歌词的歌永远不会被新建（偏好表以 lyric_id 为键）。
-    </p>
-    <div class="row">
-      <button class="btn btn-outline" id="fnosProbe" type="button" data-i18n="settings.fnos_probe">① 检测结构</button>
-      <button class="btn btn-outline" id="fnosPreview" type="button" data-i18n="settings.fnos_preview">② 预览差异</button>
-      <button class="btn btn-secondary" id="fnosApply" type="button" disabled data-i18n="settings.fnos_apply">③ 执行回填</button>
-    </div>
-    <p class="note" id="fnosStatus" style="margin-top:.9rem"></p>
-    <pre class="prebox" id="fnosOut"></pre>
   </div>
 </div>
 

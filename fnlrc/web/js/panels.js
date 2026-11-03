@@ -55,6 +55,7 @@ export function initPanels() {  $("#openSettings").addEventListener("click", ope
   $("#watchToggle").addEventListener("click", toggleWatch);
 
   buildLangPicker();
+  initSettingsNav();
 }
 
 /* ─────────────────────────────────────────── 界面语言 */
@@ -202,6 +203,38 @@ async function fnosApply() {
 }
 
 /* ─────────────────────────────────────────── 设置 */
+
+/**
+ * 设置面板改成「左导航 + 右内容」之后，切换只改 aria-current 与 hidden。
+ * 状态不落盘：每次打开都从左栏第一项开始，跟大多数软件一致。
+ */
+function initSettingsNav() {
+  const nav = $("#setNav");
+  const panes = $("#setPanes");
+  if (!nav || !panes) return;
+
+  const show = pane => {
+    $$("#setNav .setNavItem").forEach(b =>
+      b.setAttribute("aria-current", String(b.dataset.pane === pane)));
+    $$("#setPanes .setPane").forEach(s => { s.hidden = s.dataset.pane !== pane; });
+    panes.scrollTop = 0;
+  };
+
+  nav.addEventListener("click", e => {
+    const btn = e.target.closest("[data-pane]");
+    if (btn) show(btn.dataset.pane);
+  });
+  // 键盘上下箭头在导航里走动，符合 aria 的 tablist 习惯
+  nav.addEventListener("keydown", e => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = $$("#setNav .setNavItem");
+    const i = items.findIndex(b => b.getAttribute("aria-current") === "true");
+    const next = items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+    if (next) { e.preventDefault(); next.focus(); show(next.dataset.pane); }
+  });
+
+  show("lang");
+}
 
 async function openSettings() {
   openOverlay("settings");
