@@ -6,6 +6,7 @@ import { $ } from "./core.js";
 import { initSnap, initPick, initPreview, initReport, go } from "./screens.js";
 import { initPanels } from "./panels.js";
 import { initWizard } from "./wizard.js";
+import { initManual } from "./manual.js";
 
 function boot() {
   initSnap();
@@ -13,6 +14,7 @@ function boot() {
   initPreview();
   initReport();
   initPanels();
+  initManual();
   // 首次使用走引导（欢迎 → 令牌 → 选库）；已有配置则回落到原来的令牌闸门
   initWizard();
 

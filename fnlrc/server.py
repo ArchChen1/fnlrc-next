@@ -404,6 +404,92 @@ def rollback(request: Request, payload: dict = Body(...),
     return {"rolled_back": undone, "skipped": skipped}
 
 
+# ---------------------------------------------------------------- 人工翻译（M3）
+def _manual_song(root: str, rel: str):
+    """按 (root, rel) 定位一首歌。rel 可能用 / 或 \\ 分隔，两种都试。"""
+    if not root or not rel:
+        return None
+    for r in {rel, rel.replace("/", os.sep), rel.replace("\\", os.sep)}:
+        p = os.path.join(root, r)
+        if os.path.isfile(p):
+            from . import library as _lib
+            return _lib.load_song(p, root)
+    return None
+
+
+@app.post("/api/manual/lines")
+def manual_lines(payload: dict = Body(...)):
+    """读出若干首歌的逐行内容（已有译文的行也带上），供网页编辑。
+
+    只读接口，不校验令牌 —— 它返回的就是用户自己库里的歌词文本。
+    """
+    from . import lrc as L
+    from . import manual
+
+    root = payload.get("root") or ""
+    files = payload.get("files") or []
+    out = []
+    for rel in files:
+        song = _manual_song(root, rel)
+        if song is None:
+            out.append({"file": rel, "error": "找不到这个文件"})
+            continue
+        pairs, why = manual._existing_pairs(song)
+        if pairs is None:
+            out.append({"file": rel, "error": why or "没有可对齐的歌词"})
+            continue
+        lines = [{"index": i, "ms": ms, "time": L.fmt_ms(ms)[1:-1],
+                  "original": o, "translation": tr or ""}
+                 for i, (ms, o, tr, _r) in enumerate(pairs, 1)]
+        out.append({"file": rel, "title": song.title, "artist": song.artist,
+                    "expected_lang": song.expected_lang, "lines": lines})
+    return {"songs": out}
+
+
+@app.post("/api/manual/save")
+def manual_save(request: Request, payload: dict = Body(...),
+                x_fnlrc_token: str | None = Header(default=None)):
+    """把网页里填好的译文合并回 .lrc。写操作 → 必须持有写令牌。
+
+    合成走与 CLI `translate-import` 完全相同的 `manual.merge()`，
+    时间戳一个都不动。
+    """
+    require_token(request, x_fnlrc_token)
+    from . import manual
+
+    root = payload.get("root") or ""
+    rel = payload.get("file") or ""
+    rows = payload.get("lines") or []
+    song = _manual_song(root, rel)
+    if song is None:
+        raise HTTPException(404, f"找不到这个文件：{rel}")
+    body, problems, n = manual.merge(song, rows)
+    if problems:
+        return {"ok": False, "problems": problems}
+
+    target = song.lrc_path
+    try:
+        os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+        if os.path.isfile(target) and payload.get("backup", True):
+            bak = target + ".bak"
+            if not os.path.isfile(bak):
+                os.replace(target, bak)
+        with open(target, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(body)
+    except Exception as e:
+        return {"ok": False, "problems": [f"写不了 {target}：{P.mask_secret(str(e))}"]}
+
+    if payload.get("memory"):
+        manual.remember([(r.get("original", ""), r.get("translation", ""))
+                         for r in rows])
+
+    from . import lrc as L
+    v = L.validate(body)
+    return {"ok": True, "lines": n, "target": target,
+            "validation": {"ok": v["ok"], "paired_groups": v["paired_groups"],
+                           "pair_ratio": v["pair_ratio"]}}
+
+
 # ---------------------------------------------------------------- 监听（M1）
 def _watch_build(cfg: dict):
     """按配置构造一个 FolderWatcher。配置的默认值来自 store.watch_config()。"""

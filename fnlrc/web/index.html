@@ -169,7 +169,7 @@
 
       <div class="scroller rv d300" style="margin-top:1.2rem">
         <table>
-          <thead><tr><th>状态</th><th>文件</th><th>匹配到</th><th>来源</th><th>并行组</th><th>比例</th></tr></thead>
+          <thead><tr><th>状态</th><th>文件</th><th>匹配到</th><th>来源</th><th>并行组</th><th>比例</th><th>译文</th></tr></thead>
           <tbody id="reportRows"></tbody>
         </table>
       </div>
@@ -351,6 +351,11 @@
 <!-- 历史任务 -->
 <div class="overlay" id="history">
   <div class="sheet" id="historySheet" role="dialog" aria-modal="true" aria-label="历史任务"></div>
+</div>
+
+<!-- 人工翻译编辑器（M3）：逐行补译文，显式保存 -->
+<div class="overlay" id="manual">
+  <div class="sheet" id="manualSheet" role="dialog" aria-modal="true" aria-label="人工翻译"></div>
 </div>
 
 <!-- 令牌闸门：局域网/容器打开时要求填入访问令牌 -->

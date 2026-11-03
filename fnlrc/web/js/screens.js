@@ -5,6 +5,7 @@
 import { S, ACTION_LABEL, STATUS_LABEL, BACKENDS, FILTERS, GROUP, tone } from "./state.js";
 import { $, $$, esc, api, toast, fmtTime } from "./core.js";
 import { openFsBrowser } from "./fsbrowser.js";
+import { openManual, canEdit } from "./manual.js";
 
 const track = () => $("#track");
 
@@ -375,14 +376,22 @@ function renderReport() {
   $("#reportRows").innerHTML = rows.map(r => {
     const v = r.validation || {};
     const title = r.note ? ` title="${esc(r.note)}"` : "";
+    const edit = canEdit(r.status)
+      ? `<button class="btn-ghost mopen" data-file="${esc(r.file)}" type="button">补译文</button>`
+      : "—";
     return `<tr${title}>
       <td><span class="pill ${tone(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
       <td class="path" title="${esc(r.file)}">${esc(r.file)}</td>
       <td style="color:rgba(255,255,255,.7)">${esc(r.matched || "—")}</td>
       <td>${esc(r.source || "—")}</td>
       <td>${r.pairs || "—"}</td>
-      <td>${v.pair_ratio != null ? v.pair_ratio : "—"}</td></tr>`;
-  }).join("") || '<tr><td colspan="6"><div class="empty">这一栏没有内容</div></td></tr>';
+      <td>${v.pair_ratio != null ? v.pair_ratio : "—"}</td>
+      <td>${edit}</td></tr>`;
+  }).join("") || '<tr><td colspan="7"><div class="empty">这一栏没有内容</div></td></tr>';
+
+  // 逐行「补译文」按钮：打开人工翻译编辑器
+  $$("#reportRows .mopen").forEach(b =>
+    b.addEventListener("click", () => openManual(b.dataset.file)));
 }
 
 export { fmtTime };

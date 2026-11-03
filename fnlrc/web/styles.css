@@ -251,3 +251,23 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
         line-height:1.7;white-space:pre-wrap;word-break:break-word;
         max-height:22vh;overflow-y:auto;color:rgba(255,255,255,.8)}
 .prebox:empty{display:none}
+
+/* ── 人工翻译编辑器（M3）──────────────────────────────────────── */
+.mlist{max-height:48vh}
+.mline{display:grid;grid-template-columns:4.5rem 1fr 1fr;gap:.75rem;align-items:center;
+       padding:.5rem .9rem;border-bottom:1px solid var(--line-soft)}
+.mline:last-child{border-bottom:0}
+.mline.mhead{position:sticky;top:0;z-index:2;background:#000;
+             font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;
+             color:rgba(255,255,255,.5);border-bottom:1px solid var(--line)}
+.mtime{color:rgba(255,255,255,.45)}
+.msrc{color:rgba(255,255,255,.85);word-break:break-word}
+input.mtran{width:100%;background:transparent;border:0;
+            border-bottom:1px solid rgba(255,255,255,.25);color:#fff;
+            font:inherit;font-size:.875rem;padding:.35rem .1rem;transition:border-color .2s}
+input.mtran:focus{outline:none;border-bottom-color:#fff}
+input.mtran::placeholder{color:rgba(255,255,255,.35)}
+@media(max-width:640px){
+  .mline{grid-template-columns:3.5rem 1fr;gap:.35rem .6rem}
+  .mline .mtran{grid-column:1 / -1}
+}

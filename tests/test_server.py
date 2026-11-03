@@ -526,3 +526,80 @@ def test_启动后状态变为running(client, auth, tmp_path):
     # 收工
     assert client.post("/api/watch/stop", headers=auth).status_code == 200
     assert client.get("/api/watch/status").json()["running"] is False
+
+
+# ---------------------------------------------------------------- 人工翻译接口（M3）
+@pytest.fixture
+def mlib(tmp_path):
+    """一个只含 1 首日文单语歌的迷你库，歌词 4 行。"""
+    root = tmp_path / "music"
+    (root / "日语").mkdir(parents=True)
+    audio = root / "日语" / "song.flac"
+    audio.write_bytes(b"")
+    lrc = root / "日语" / "song.lrc"
+    lrc.write_text("".join(f"[00:1{i}.00]ああ サンプル{i}\n" for i in range(4)),
+                   encoding="utf-8")
+    return root, audio, lrc
+
+
+def test_读取歌词行_无需令牌(client, mlib):
+    """只读接口：返回用户自己库里的歌词文本，不该要求令牌。"""
+    root, _a, _l = mlib
+    r = client.post("/api/manual/lines", json={"root": str(root), "files": ["日语/song.flac"]})
+    assert r.status_code == 200
+    song = r.json()["songs"][0]
+    assert song["title"] and song["expected_lang"] == "ja"
+    assert len(song["lines"]) == 4
+    assert song["lines"][0]["original"] == "ああ サンプル0"
+    assert song["lines"][0]["translation"] == ""
+    assert song["lines"][0]["time"] == "00:10.00"
+
+
+def test_读取不存在的文件如实报错(client, mlib):
+    root, _a, _l = mlib
+    d = client.post("/api/manual/lines",
+                    json={"root": str(root), "files": ["日语/nope.flac"]}).json()
+    assert d["songs"][0]["error"]
+
+
+def test_保存译文需要令牌(client, mlib):
+    root, _a, _l = mlib
+    r = client.post("/api/manual/save", json={
+        "root": str(root), "file": "日语/song.flac",
+        "lines": [{"index": 1, "original": "ああ サンプル0", "translation": "译文一"}]})
+    assert r.status_code == 401
+
+
+def test_保存译文写回文件并备份(client, auth, mlib):
+    root, _a, lrc = mlib
+    r = client.post("/api/manual/save", headers=auth, json={
+        "root": str(root), "file": "日语/song.flac",
+        "lines": [{"index": 1, "original": "ああ サンプル0", "translation": "译文一"},
+                  {"index": 2, "original": "ああ サンプル1", "translation": "译文二"}]})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok"] is True and d["lines"] == 2
+    body = lrc.read_text(encoding="utf-8")
+    assert "译文一" in body and "译文二" in body
+    assert (root / "日语" / "song.lrc.bak").exists(), "覆盖前必须备份"
+    # 时间轴没动
+    assert body.count("[00:10.00]") == 2 and body.count("[00:12.00]") == 1
+
+
+def test_保存时改过的原文被拦下(client, auth, mlib):
+    root, _a, lrc = mlib
+    before = lrc.read_text(encoding="utf-8")
+    d = client.post("/api/manual/save", headers=auth, json={
+        "root": str(root), "file": "日语/song.flac",
+        "lines": [{"index": 1, "original": "被人改过", "translation": "x"}]}).json()
+    assert d["ok"] is False and d["problems"]
+    assert lrc.read_text(encoding="utf-8") == before, "校验不过时绝不能动原文件"
+
+
+def test_保存时可选择关闭备份(client, auth, mlib):
+    root, _a, _l = mlib
+    client.post("/api/manual/save", headers=auth, json={
+        "root": str(root), "file": "日语/song.flac",
+        "lines": [{"index": 1, "original": "ああ サンプル0", "translation": "译文"}],
+        "backup": False})
+    assert not (root / "日语" / "song.lrc.bak").exists()

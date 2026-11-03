@@ -252,6 +252,125 @@ def cmd_serve(a) -> int:
     # 顶层 `--server` 用 a.open，子命令 `serve` 也用 --open（同一个 dest）
     return serve(a.host, a.port, bool(getattr(a, "open", False)))
 
+# ---------------------------------------------------------------- 人工翻译（M3）
+def cmd_translate_export(a) -> int:
+    """导出缺译文行，供人工填写。默认 CSV（Excel 友好），--format json 给工具用。"""
+    from . import manual
+
+    if not os.path.isdir(a.root):
+        print(f"打不开这个路径：{a.root}", file=sys.stderr)
+        return 1
+    songs = lib.select(a.root, only=a.only, limit=a.limit)
+    if not songs:
+        print("没有要处理的歌", file=sys.stderr)
+        return 1
+
+    def say(msg):
+        print(msg, flush=True)
+
+    meta = manual.export_files(songs, a.out, fmt=a.format, with_context=a.context,
+                               only_missing=not a.all, root=a.root, log=say)
+    if meta["lines"] == 0:
+        print("没有需要人工翻译的行（都是中文，或都已有译文）", file=sys.stderr)
+        return 0
+    print(f"已导出 {meta['files']} 首歌、{meta['lines']} 行待译 → {meta['out']}")
+    print("填好 translation 列后：fnlrc translate-import --from "
+          f"{meta['out']}" + (" --write" if a.write else "（预览）"))
+    return 0
+
+
+def cmd_translate_import(a) -> int:
+    """读回人工填好的译文，按原时间戳合成为双语。默认不写库。"""
+    from . import lrc as L
+    from . import manual
+
+    if not os.path.isfile(a.frm):
+        print(f"打不开这个文件：{a.frm}", file=sys.stderr)
+        return 1
+    if not os.path.isdir(a.root):
+        print(f"打不开这个路径：{a.root}", file=sys.stderr)
+        return 1
+
+    with open(a.frm, "r", encoding="utf-8-sig") as fh:
+        text = fh.read()
+    fmt = "json" if a.frm.lower().endswith(".json") else "csv"
+    try:
+        parsed = manual.parse(text, fmt=fmt)
+    except manual.ImportError_ as e:
+        for m in e.problems:
+            print(f"❌ {m}", file=sys.stderr)
+        return 1
+
+    songs = {s.rel: s for s in lib.scan(a.root)}
+    out_dir = a.dump or os.path.join(os.getcwd(), "fnlrc_out")
+    ok = bad = wrote = 0
+    results = []
+    for rel, rows in parsed.items():
+        song = songs.get(rel) or _song_by_rel(a.root, rel)
+        if song is None:
+            print(f"⚠ 找不到对应的歌：{rel}", file=sys.stderr)
+            bad += 1
+            continue
+        body, problems, n = manual.merge(song, rows)
+        if problems:
+            bad += 1
+            for m in problems:
+                print(f"❌ {rel}：{m}", file=sys.stderr)
+            results.append({"file": rel, "ok": False, "problems": problems})
+            continue
+        # 落盘：--write 直写旁挂（先备份），否则进 dump 目录预览
+        target = song.lrc_path if a.write else os.path.join(
+            out_dir, os.path.splitext(rel)[0] + ".lrc")
+        try:
+            os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+            if a.write and os.path.isfile(target) and not a.no_backup:
+                bak = target + ".bak"
+                if not os.path.isfile(bak):
+                    os.replace(target, bak)
+            with open(target, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(body)
+        except Exception as e:
+            bad += 1
+            print(f"❌ {rel}：写不了 {target}：{e}", file=sys.stderr)
+            results.append({"file": rel, "ok": False, "problems": [str(e)]})
+            continue
+        ok += 1
+        wrote += n
+        v = L.validate(body)
+        results.append({"file": rel, "ok": True, "lines": n,
+                        "validation": {"ok": v["ok"], "paired_groups": v["paired_groups"],
+                                       "pair_ratio": v["pair_ratio"]},
+                        "target": target})
+        mark = "✓" if v["ok"] else "⚠"
+        print(f"{mark} {rel}：{n} 行译文 → {target}"
+              + ("" if v["ok"] else f"（并行组 {v['paired_groups']}，比例 {v['pair_ratio']}）"))
+
+    # 记忆库（默认关）
+    if a.memory and ok:
+        pairs = []
+        for rel, rows in parsed.items():
+            for r in rows:
+                if r["translation"]:
+                    pairs.append((r["original"], r["translation"]))
+        added = manual.remember(pairs)
+        print(f"（记忆库：新增 {added} 条）")
+
+    print(f"\n=== 汇总 === 成功 {ok} 首（{wrote} 行译文），失败 {bad} 首")
+    if a.report:
+        with open(a.report, "w", encoding="utf-8") as fh:
+            json.dump({"from": a.frm, "results": results}, fh, ensure_ascii=False, indent=1)
+        print(f"报告: {a.report}")
+    if not a.write and ok:
+        print("（预览模式：加 --write 才写进音乐库；现在只生成到 dump 目录）")
+    return 1 if bad else 0
+
+
+def _song_by_rel(root: str, rel: str):
+    """按相对路径直接定位一首歌（scan 用的相对路径分隔符可能不同）。"""
+    p = os.path.join(root, rel)
+    if os.path.isfile(p):
+        return lib.load_song(p, root)
+    return None
 
 # ---------------------------------------------------------------- provider（M2）
 def _load_all_providers() -> None:
@@ -539,6 +658,30 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("name", help="源标识，如 netease / lrclib")
     pt.add_argument("--file", required=True, help="用来测试的音频文件路径")
     pt.set_defaults(fn=cmd_provider_test)
+
+    te = sub.add_parser("translate-export", help="导出缺译文行，供人工填写（M3）")
+    te.add_argument("--root", required=True)
+    te.add_argument("--out", required=True, help="输出文件（.csv 默认 / .json 程序友好）")
+    te.add_argument("--format", choices=["csv", "json"], help="默认按扩展名推断")
+    te.add_argument("--context", action="store_true",
+                    help="附带前后各一行原文，便于理解语境（默认关）")
+    te.add_argument("--all", action="store_true",
+                    help="连已是单语的歌也收（默认只收缺译文的行）")
+    te.add_argument("--only", help="只处理路径含该子串的歌")
+    te.add_argument("--limit", type=int)
+    te.add_argument("--write", action="store_true", help="提示导回时直接写库")
+    te.set_defaults(fn=cmd_translate_export)
+
+    ti = sub.add_parser("translate-import", help="读回人工译文并合成双语（默认预览）")
+    ti.add_argument("--from", dest="frm", required=True, help="translate-export 产出的文件")
+    ti.add_argument("--root", required=True, help="音乐库根目录")
+    ti.add_argument("--write", action="store_true", help="真的写入音乐库（替换前备份 .bak）")
+    ti.add_argument("--dump", help="预览输出目录（默认 ./fnlrc_out）")
+    ti.add_argument("--no-backup", action="store_true", help="写入时不生成 .bak")
+    ti.add_argument("--memory", action="store_true",
+                    help="把本次译文写进记忆库（默认关，跨歌复用同语种→中文译文）")
+    ti.add_argument("--report", help="把结果写成 JSON 报告")
+    ti.set_defaults(fn=cmd_translate_import)
     return p
 
 

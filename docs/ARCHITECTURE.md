@@ -29,6 +29,7 @@ fnlrc/
 │   │   ├── loader.py          发现 / 加载 $FNLRC_DATA/plugins（失败隔离）
 │   │   └── builtin/           内置源：netease.py / lrclib.py（官方也是插件）
 │   ├── pipeline.py           ★ 单曲决策 + 批量执行（三端唯一入口）
+│   ├── manual.py             人工翻译：导出待译 → 校验 → 按原时间轴合成 + 记忆库
 │   ├── watcher.py            监听文件夹：纯轮询、静默期、搬运、重试、状态落盘
 │   ├── fnos.py               飞牛歌词库：探测 / 差异计划 / 原地回填（**零第三方依赖**）
 │   ├── store.py               配置 / 访问令牌 / 任务报告
@@ -39,7 +40,7 @@ fnlrc/
 │   └── web/                    单页 UI（桌面与网页共用同一份）
 │       ├── index.html          骨架与文案
 │       ├── styles.css
-│       └── js/                 ES module 拆分：state / core / fsbrowser / screens / panels / main
+│       └── js/                 ES module 拆分：state / core / fsbrowser / screens / panels / manual / main
 ├── docs/                      文档（含本文）
 ├── scripts/                   打包脚本（PyInstaller / Docker）+ 诊断工具
 ├── tests/                     回归用例（含飞牛规则边界）
@@ -55,6 +56,7 @@ fnlrc/
 | `library.py` | 文件系统层的库：遍历、标签、编码、乱码识别、语言预期、统计 | 网络、写入 |
 | `providers/` | 外部世界的边界：**歌词源**（网易云、LRCLIB、社区插件）经 `Provider` 协议产出 `pairs`；`fetch_lyrics` 按 priority 串行降级；远端翻译后端（DeepSeek）、匹配打分与**译文对齐** | 决策（要不要翻、要不要写） |
 | `pipeline.py` | **决策与编排**：调 `fetch_lyrics` 选源 → 校验 → 译文对齐/翻译降级 → 重试 → 写/不写 → 结果 | IO 细节、UI、具体某个源 |
+| `manual.py` | **人工翻译**：`collect` 收集缺译文行 → `export`/`parse` 的 CSV/JSON 往返 → `merge` 校验并按**原时间戳**合成 → 记忆库（默认关） | 联网抓词（那是 providers）、要不要写库（由 CLI/HTTP 决定） |
 | `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重 | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
 | `fnos.py` | 飞牛数据库的只读探测、差异计划、原地回填（已有歌词）与**补建歌词行**（没有歌词的歌，要 `--allow-insert`） | 歌词的获取与翻译（它只负责"把已生成的 `.lrc` 搬进飞牛"） |
 | `store.py` | 任务与结果的持久化、配置与令牌、回滚 | 业务逻辑 |
