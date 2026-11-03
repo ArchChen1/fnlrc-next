@@ -11,7 +11,8 @@ import { $ } from "./core.js";
 import { t } from "./i18n/index.js";
 import { initTabs, initPick, initPreview, initReport, requestTab, go, applyMode,
          renderBackends, renderSummary, renderReport, renderFilters,
-         bumpStats, renderLog, renderReportSummary, renderProgress } from "./screens.js";import { initPanels, initLang, setLangChangeHook } from "./panels.js";
+         bumpStats, renderLog, renderReportSummary, renderProgress,
+         syncPreviewToggle } from "./screens.js";import { initPanels, initLang, setLangChangeHook } from "./panels.js";
 import { initWizard } from "./wizard.js";
 import { initManual } from "./manual.js";
 import { initDash, openFlow, setView, refreshDash, MODE_AUTO, MODE_MANUAL } from "./dashboard.js";
@@ -23,6 +24,7 @@ import { initDash, openFlow, setView, refreshDash, MODE_AUTO, MODE_MANUAL } from
 function rerender() {
   renderBackends();
   renderProgress();
+  syncPreviewToggle();   // 「预览模式」的文案随模式变，切语言时要重画
   if (S.summary) renderSummary(S.summary, S.root);
   if (S.results.length) {
     bumpStats(S.results);

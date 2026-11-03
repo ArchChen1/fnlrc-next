@@ -25,13 +25,20 @@ export function persistEnabled() {
 
 /* ─────────────────────────────────────────── 视图切换 */
 
+/**
+ * 切视图。抽屉的进出动画完全交给 CSS（`.panels` 的 transform），
+ * 这里只改 `data-view`，保证「开」和「关」是同一段 transition 的两个方向。
+ * `body.inFlow` 负责锁住底层 dashboard 的滚动，否则抽屉盖着还能滑到底下去。
+ */
 export function setView(view) {
   const app = $("#app");
   if (!app) return;
   app.dataset.view = view;
   document.body.classList.toggle("inFlow", view === "flow");
   try { localStorage.setItem("fnlrc_view", view); } catch (e) { /* 隐私模式 */ }
-  scrollTo({ top: 0 });
+  const panels = $("#panels");
+  if (panels) panels.scrollTop = 0;
+  if (view !== "flow") scrollTo({ top: 0 });
 }
 
 export function openFlow(mode) {

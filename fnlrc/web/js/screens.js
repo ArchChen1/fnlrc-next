@@ -117,6 +117,13 @@ export function applyMode() {
   }
   if (note) note.hidden = auto;   // 自动模式不写库，这句没意义
 
+  // 写入开关全站只有一个（表格上方那个「预览模式」）。
+  // 自动监测时它的值即 watch_write：不勾 = 监听发现新歌就直接写库。
+  syncPreviewToggle();
+  // 「强制重做」是本次任务的临时参数，监听没有这个概念 —— 自动模式藏掉
+  const forceField = $("#forceModeField");
+  if (forceField) forceField.hidden = auto;
+
   // 监听目录只对自动监测有意义 —— 立即执行本来就不监听
   const autoBox = $("#autoWatch");
   if (autoBox) autoBox.hidden = !auto;
@@ -125,6 +132,23 @@ export function applyMode() {
   // 自动模式没有「进度 / 报告」Tab，别停在那两个上面
   if (auto && S.tab >= AUTO_TABS) go(0);
   syncTabLocks();
+}
+
+/**
+ * 同步「预览模式」这一个开关。
+ *
+ * 它现在是**全站唯一的写入开关**：立即执行时是本次任务的临时参数，
+ * 自动监测时就是监听器的 `watch_write`。外面那个 span 的文案随模式切换，
+ * 免得两个名字指同一件事（旧版就是这样，勾了上面那个实际不起作用）。
+ */
+export function syncPreviewToggle() {
+  const box = $("#previewMode");
+  if (!box) return;
+  const label = $("#previewModeLabel");
+  if (label) {
+    label.innerHTML = t(S.mode === "auto"
+      ? "auto.preview_label" : "preview.mode");
+  }
 }
 
 /**
@@ -144,8 +168,9 @@ function fillAutoWatch() {
   set("#autoWatchMoveTo", w.watch_move_to || "");
   const after = $("#autoWatchAfter");
   if (after) after.value = w.watch_after || "keep";
-  const wr = $("#autoWatchWrite");
-  if (wr) wr.checked = w.watch_write !== false;
+  // 「预览模式」是唯一的写入开关：watch_write=false 就是「预览（不写入）」
+  const wr = $("#previewMode");
+  if (wr) wr.checked = w.watch_write === false;
   const quiet = $("#autoWatchQuiet");
   if (quiet) quiet.value = w.watch_quiet_s != null ? w.watch_quiet_s : 8;
   const poll = $("#autoWatchPoll");
@@ -183,7 +208,8 @@ export function autoWatchPatch() {
     watch_root: typed || S.root || "",
     watch_after: $("#autoWatchAfter")?.value || "keep",
     watch_move_to: ($("#autoWatchMoveTo")?.value || "").trim(),
-    watch_write: !!$("#autoWatchWrite")?.checked,
+    // 与「预览模式」共用同一个开关：勾着预览 = 不写库
+    watch_write: !$("#previewMode")?.checked,
     watch_quiet_s: parseInt($("#autoWatchQuiet")?.value, 10) || 8,
     watch_poll_s: parseInt($("#autoWatchPoll")?.value, 10) || 5,
     watch_autostart: !!$("#autoWatchAutostart")?.checked
@@ -303,6 +329,7 @@ export function initPreview() {
   // 自动监测那段：目的地字段随「补完后」显隐；监听目录留空时提示会用它监听哪个库
   $("#autoWatchAfter")?.addEventListener("change", syncAutoWatchUI);
   $("#autoWatchRoot")?.addEventListener("input", syncAutoWatchUI);
+  syncPreviewToggle();
 }
 
 /** 当前降级链（有序）。空 = 还没配过，用默认值 */

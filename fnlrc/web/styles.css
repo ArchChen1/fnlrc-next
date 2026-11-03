@@ -30,6 +30,7 @@
   --grad-rose:linear-gradient(135deg,#e11d48,#db2777);
   --ok:#6ee7b7; --warn:#fcd34d; --bad:#fca5a5;
   --radius-full:9999px;
+  --topbar-h:4.5rem;                    /* 顶栏实际高度，抽屉与 scroll-margin 都用它 */
   --ease:cubic-bezier(.22,.61,.36,1);
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",
          "Microsoft YaHei",system-ui,sans-serif;
@@ -47,17 +48,20 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
 
 /*
   两个视图，靠 .app[data-view] 切换：
-    dash  首页 dashboard（无人值守的默认落地页）
-    flow  手动流程的全屏抽屉（选库 → 概览 → 补完 → 进度 → 报告）
-  「抽屉」不做真正 position:fixed 的浮层，而是整页替换 —— 内容更多、手机更好滚，
-  视觉上同样是盖满一屏，点左上角「← 返回概览」退回。
+    dash  首页 dashboard（无人值守的默认落地页，始终留在底层）
+    flow  流程抽屉（选库 → 概览 → 补完 → 进度 → 报告），从下往上抽出
+
+  抽屉用的是真的 position:fixed 浮层：`.panels` 常驻 DOM、靠 translateY 进出画面。
+  这样「进」和「退」是同一段 transition 的两个方向，动画天然对称 ——
+  点左上角「← 返回概览」时会原路滑下去。
+  顶栏（z-index 更高）与手机底栏（更高）留在抽屉之上，滑过时从它们底下穿过。
 */
-.app[data-view="dash"] .panels,
 .app[data-view="dash"] .tabs,
 .app[data-view="dash"] .tabs--bottom,
 .app[data-view="dash"] .backbtn{display:none}
 .app[data-view="dash"] .topbar .tabs--top{display:none}
-.app[data-view="flow"] .dash{display:none}
+/* 抽屉盖住了 dashboard，底层的它不该还能被点到 / 滚到 */
+body.inFlow{overflow:hidden}
 
 /* ── 首页 dashboard ─────────────────────────────────────── */
 .dash{position:relative;flex:1 1 auto;display:flex;justify-content:center;
@@ -117,14 +121,26 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
   这就是本次改版的核心：去掉 100dvh + scroll-snap 的几何硬约束，
   表格 / 日志数据变多时页面自己变长，不再被迫塞进内部小滚动条。
 */
-.panels{flex:1 1 auto;display:block}
+/* 流程抽屉本体：常驻、靠 transform 进出画面 */
+.panels{position:fixed;inset:0;z-index:30;display:block;
+        background:var(--bg-primary);overflow-y:auto;overscroll-behavior:contain;
+        /* 顶栏是吸顶的，抽屉内容要给它让出位置 */
+        padding-top:var(--topbar-h);
+        transform:translateY(100%);
+        visibility:hidden;
+        transition:transform .38s var(--ease),visibility 0s linear .38s}
+.app[data-view="flow"] .panels{transform:translateY(0);visibility:visible;
+        transition:transform .38s var(--ease),visibility 0s linear 0s}
+@media(prefers-reduced-motion:reduce){
+  .panels,.app[data-view="flow"] .panels{transition:none}
+}
 .panel{position:relative;display:flex;justify-content:center;
-       padding:2.5rem 1.5rem 3rem;min-height:calc(100dvh - 4.5rem);
+       padding:2.5rem 1.5rem 3rem;min-height:calc(100dvh - var(--topbar-h));
        /* 背景 .glow 故意超出面板边界（inset:-20%），必须在面板这层裁掉，
           否则手机窄屏会多出一条横向滚动条 */
        overflow-x:clip;
        /* 切 Tab 时对齐到面板顶部；留出吸顶栏的高度，别被它盖住 */
-       scroll-margin-top:4.5rem}
+       scroll-margin-top:var(--topbar-h)}
 .panel[hidden]{display:none}
 /* 兜底：任何带 class 的元素（如 label.field{display:block}）被 hidden 时也要真的藏起来 */
 [hidden]{display:none!important}
@@ -160,8 +176,6 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
 @keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 
 /* ── 排版 ───────────────────────────────────────────────────── */
-.hero{font-size:clamp(2.75rem,7vw,6rem);font-weight:700;letter-spacing:-.025em;
-      line-height:1.02;margin:0}
 .h1{font-size:clamp(1.75rem,4.2vw,3.5rem);font-weight:700;letter-spacing:-.02em;margin:0}
 .body{font-size:clamp(1rem,1.6vw,1.35rem);line-height:1.65;color:rgba(255,255,255,.82);margin:0}
 .small{font-size:.8125rem;color:var(--text-muted)}
@@ -308,8 +322,11 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
     left:22%;right:22%;top:0;height:2px;background:#fff;border-radius:0 0 2px 2px}
   .tabs--bottom .tab[data-locked="true"]{color:rgba(255,255,255,.28)}
   .tabs--bottom .tab[data-locked="true"][aria-selected="true"]{color:rgba(255,255,255,.55)}
-  /* 底栏不遮挡内容 */
+  /* 底栏不遮挡内容；手机顶栏更矮，抽屉也让出对应高度 */
   .panels{padding-bottom:calc(3.5rem + env(safe-area-inset-bottom))}
+}
+@media(max-width:767px){
+  :root{--topbar-h:3.5rem}
 }
 
 /* ── 覆盖式面板（设置 / 历史 / 令牌闸门）────────────────────── */
@@ -437,7 +454,7 @@ input.mtran::placeholder{color:rgba(255,255,255,.35)}
   .topbar{padding:.75rem 1rem}
   .topbar .brand em{display:none}
   .panel{padding:1.5rem 1rem 2rem;min-height:0}
-  .panel .h1,.panel .hero{font-size:clamp(1.5rem,7vw,2.25rem)}
+  .panel .h1{font-size:clamp(1.5rem,7vw,2.25rem)}
   .card{padding:1.35rem}
   .stat{padding:.9rem .6rem}
 

@@ -102,14 +102,12 @@
   <section class="panel" id="panel0" role="tabpanel" data-i18n-aria="tab.pick">
     <div class="glow indigo"></div>
     <div class="stage">
-      <h1 class="hero rv d0" data-i18n-html="pick.hero">让每一首歌<br>都有译文</h1>
-      <p class="body rv d150" style="margin-top:1.5rem;max-width:38rem" data-i18n-html="pick.body">
-        把「只有原语言、单行显示、刮错、乱码、干脆没歌词」变成
-        <strong style="color:#fff;font-weight:600">原文 + 译文双行</strong>。
-        默认只预览、不写入，确认之后再动手。
+      <h1 class="h1 rv d0" data-i18n="pick.title">选择音乐库</h1>
+      <p class="note rv d150" style="margin:1rem 0 0" data-i18n-html="pick.body">
+        填上音乐库所在的文件夹就能开始。默认只预览、不写入，确认之后再动手。
       </p>
 
-      <div class="rv d225" style="margin-top:2.5rem;max-width:38rem">
+      <div class="rv d225" style="margin-top:2rem;max-width:38rem">
         <label class="field">
           <span data-i18n="pick.root_label">音乐库路径</span>
           <input type="text" id="root" data-i18n-ph="pick.root_ph" placeholder="\\NAS\音乐  或  /vol2/1000/音乐"
@@ -166,9 +164,9 @@
         <div>
           <label class="row checkline">
             <input type="checkbox" id="previewMode" checked>
-            <span data-i18n="preview.mode">预览模式（不写入，只生成到 fnlrc_out/）</span>
+            <span id="previewModeLabel" data-i18n-html="preview.mode">预览模式（不写入，只生成到 fnlrc_out/）</span>
           </label>
-          <label class="row checkline" style="margin-bottom:.9rem">
+          <label class="row checkline" id="forceModeField" style="margin-bottom:.9rem">
             <input type="checkbox" id="forceMode">
             <span data-i18n="preview.force">强制重做已有双语歌词</span>
           </label>
@@ -199,7 +197,7 @@
       <div class="dashCard rv d300" id="autoWatch" style="margin-top:1.2rem" hidden>
         <p class="eyebrow" style="margin:0 0 .8rem" data-i18n="auto.watch_title">监听</p>
         <p class="note" style="margin:0 0 1rem" data-i18n="auto.watch_note">
-          留空就监听上面的音乐库。默认只预览不写，勾上「直接写入」才会改你的文件。
+          留空就监听上面的音乐库。写不写库由上面那个「预览模式」决定。
         </p>
         <label class="field"><span data-i18n="settings.watch_root">监听目录</span>
           <input type="text" id="autoWatchRoot" placeholder="/music/inbox  或  \\NAS\下载\待整理"
@@ -220,10 +218,6 @@
                    autocomplete="off" spellcheck="false"></label>
         </div>
 
-        <label class="row checkline" style="margin-top:.6rem">
-          <input type="checkbox" id="autoWatchWrite">
-          <span data-i18n-html="settings.watch_write">直接写入旁挂 <span class="mono">.lrc</span>（不勾则只预览到输出目录）</span>
-        </label>
         <div class="grid g2" style="margin-top:.8rem">
           <label class="field"><span data-i18n="settings.watch_quiet">静默几秒后才处理（防半截文件）</span>
             <input type="number" id="autoWatchQuiet" min="1" max="600" step="1"></label>

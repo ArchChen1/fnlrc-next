@@ -48,3 +48,7 @@ desktop.ini
 
 # ---- Claude Code 本地设置（launch.json 是有用的，留着提交）----
 .claude/settings.local.json
+
+# 提交信息临时文件
+_msg.txt
+
