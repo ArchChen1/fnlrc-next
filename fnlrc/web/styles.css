@@ -262,13 +262,23 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .wizdot[aria-current="true"]{background:#fff;color:#000;border-color:#fff}
 .wizstep h2{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
 
-.toast{position:fixed;left:50%;bottom:2rem;transform:translate(-50%,150%);z-index:80;
+/*
+  隐藏态不能靠 translate 往下挪 —— 它自带内边距（约 43px 高），
+  bottom 只挪 32px，顶部会有一条白边露在窗口底部（实测踩到）。
+  改用 opacity + visibility：无论底部间距多大都完整藏住。
+*/
+.toast{position:fixed;left:50%;bottom:2rem;z-index:80;
        background:#fff;color:#000;font-size:.875rem;font-weight:600;
        padding:.75rem 1.4rem;border-radius:var(--radius-full);
-       transition:transform .35s var(--ease);max-width:min(90vw,34rem);
+       max-width:min(90vw,34rem);
+       transform:translate(-50%,1.25rem);opacity:0;visibility:hidden;
+       transition:transform .35s var(--ease),opacity .25s var(--ease),
+                  visibility .35s var(--ease);
        /* 纯提示，不该拦住任何点击（手机上它会盖住底部 Tab 栏） */
        pointer-events:none}
-.toast.show{transform:translate(-50%,0)}
+.toast.show{transform:translate(-50%,0);opacity:1;visibility:visible}
+/* 没有内容时连盒子都不要占位 */
+.toast:empty{display:none}
 
 /* 动态插入的目录列表行 */
 .diritem{width:100%;justify-content:flex-start;margin-bottom:.4rem}
