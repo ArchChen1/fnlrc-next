@@ -181,3 +181,65 @@ def test_桌面与主入口的模块名一致():
         mods |= {a.name for n in ast.walk(tree) if isinstance(n, ast.Import)
                  for a in n.names}
         assert "pywebview" not in mods, f"{f} 把 PyPI 包名当成模块名导入了"
+
+
+# ---------------------------------------------------------------- provider 子命令（M2）
+@pytest.fixture
+def isolated_data(monkeypatch, tmp_path):
+    """把数据目录隔离到临时目录，避免加载到用户真实的 plugins/。"""
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path / "data"))
+    from fnlrc import store
+    monkeypatch.setattr(store, "data_dir", lambda: tmp_path / "data")
+    return tmp_path / "data"
+
+
+def test_provider_list列出内置源(isolated_data, capsys):
+    rc = cli.main(["provider", "list"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "netease" in out and "lrclib" in out
+    assert "网易云" in out and "LRCLIB" in out
+
+
+def test_provider_list能认出用户插件(isolated_data, capsys):
+    plugins = isolated_data / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    (plugins / "mysrc.py").write_text(
+        "from fnlrc.providers import registry\n"
+        "class P:\n"
+        "    name='mysrc'; label='我的源'; priority=30; needs_key=False\n"
+        "    def available(self): return False, '未配置'\n"
+        "    def fetch(self, song, cfg, *, deadline=None): return None\n"
+        "registry.register(P())\n", encoding="utf-8")
+    rc = cli.main(["provider", "list"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "mysrc" in out and "我的源" in out
+    assert "未配置" in out          # 不可用的原因要显示出来
+
+
+def test_provider_test未知源退出码1(isolated_data, tmp_path, capsys):
+    f = tmp_path / "s.flac"
+    f.write_bytes(b"")
+    assert cli.main(["provider", "test", "不存在", "--file", str(f)]) == 1
+
+
+def test_provider_test跑通并打印契约(isolated_data, tmp_path, monkeypatch, capsys):
+    from fnlrc import library as lib
+    from fnlrc.providers import base
+    f = tmp_path / "s.flac"
+    f.write_bytes(b"")
+
+    def fake_fetch(self, song, cfg, *, deadline=None):
+        return base.LyricResult(source="netease", matched="a - t", score=8.0,
+                                lyric_lang="ja",
+                                pairs=[(1000, "ああ", "译文", None)])
+
+    from fnlrc.providers.builtin import netease as ne
+    monkeypatch.setattr(ne.NeteaseProvider, "fetch", fake_fetch)
+
+    rc = cli.main(["provider", "test", "netease", "--file", str(f)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "契约通过" in out
+    assert "1 对" in out

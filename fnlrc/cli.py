@@ -41,6 +41,8 @@ def _config_from_args(a) -> pl.Config:
         deadline_s=int(cfg.get("deadline_s", 25) or 25),
         translate_deadline_s=int(cfg.get("translate_deadline_s", 180) or 180),
         limit=getattr(a, "limit", None),
+        providers_enabled=cfg.get("providers_enabled") or None,
+        providers_disabled=cfg.get("providers_disabled") or None,
     )
 
 
@@ -251,6 +253,117 @@ def cmd_serve(a) -> int:
     return serve(a.host, a.port, bool(getattr(a, "open", False)))
 
 
+# ---------------------------------------------------------------- provider（M2）
+def _load_all_providers() -> None:
+    """内置源 + 用户插件，全部注册进注册表。幂等。"""
+    from .providers.builtin import register_builtins
+    from .providers import loader
+
+    register_builtins()
+    loader.load_plugins(log=lambda m: print(m, file=sys.stderr))
+
+
+def cmd_provider_list(a) -> int:
+    from .providers import registry
+
+    _load_all_providers()
+    rows = []
+    for p in registry.all_providers():
+        try:
+            ok, why = p.available()
+        except Exception as e:
+            ok, why = False, P.mask_secret(e)
+        rows.append((p.name, getattr(p, "label", p.name), getattr(p, "priority", 999),
+                     getattr(p, "needs_key", False), ok, why))
+
+    print(f"{'NAME':<12}{'LABEL':<14}{'PRIORITY':>8}  {'NEEDS_KEY':<9}  AVAILABLE")
+    for name, label, prio, needs_key, ok, why in rows:
+        flag = "✅" if ok else f"❌ {why}"
+        print(f"{name:<12}{label:<14}{prio:>8}  {'yes' if needs_key else 'no':<9}  {flag}")
+    if not rows:
+        print("（没有任何已注册的歌词源）")
+    return 0
+
+
+def cmd_provider_test(a) -> int:
+    from .providers import base, registry
+
+    _load_all_providers()
+    p = registry.get(a.name)
+    if p is None:
+        print(f"没有这个源：{a.name}（可用：{', '.join(registry.names()) or '无'}）",
+              file=sys.stderr)
+        return 1
+
+    if not os.path.isfile(a.file):
+        print(f"打不开这个文件：{a.file}", file=sys.stderr)
+        return 1
+
+    ok, why = p.available()
+    if not ok:
+        print(f"源 {a.name} 当前不可用：{why}", file=sys.stderr)
+        return 1
+
+    root = os.path.dirname(a.file)
+    song = lib.load_song(a.file, root)
+    cfg = _config_from_args(a)
+    print(f"测试源 {a.name}（{getattr(p, 'label', a.name)}）")
+    print(f"  曲目：{song.title} / {song.artist}（预期语言 {song.expected_lang}）")
+
+    dl = time.time() + cfg.deadline_s
+    try:
+        res = p.fetch(song, cfg, deadline=dl)
+    except Exception as e:
+        print(f"  ❌ 取词抛异常：{P.mask_secret(e)}", file=sys.stderr)
+        return 1
+    if res is None:
+        print("  结果：这个源没有返回可用歌词（不等于失败，看源站是否有这首歌）")
+        return 0
+
+    problems = _check_contract(res)
+    print(f"  匹配：{res.matched}（score={res.score}，语言 {res.lyric_lang}）")
+    print(f"  归一化：{len(res.pairs)} 对，其中 {sum(1 for r in res.pairs if r[2])} 行有译文")
+    if problems:
+        print("  ❌ 契约未通过：")
+        for msg in problems:
+            print(f"     · {msg}")
+        return 2
+    print("  ✅ 契约通过")
+    return 0
+
+
+def _check_contract(res) -> list[str]:
+    """对一次取词结果跑通用契约检查（`tests/test_provider_contract.py` 同源逻辑）。"""
+    bad: list[str] = []
+    if not res.matched:
+        bad.append("matched 为空（用户无法核对配到了哪首）")
+    if not isinstance(res.score, (int, float)):
+        bad.append(f"score 不是数字：{res.score!r}")
+    last = -1
+    for row in res.pairs:
+        if not (isinstance(row, tuple) and len(row) == 4):
+            bad.append(f"pair 不是四元组：{row!r}")
+            break
+        ms, orig, trans, roman = row
+        if not isinstance(ms, int):
+            bad.append(f"毫秒不是整数：{ms!r}")
+            break
+        if ms < last:
+            bad.append(f"毫秒未递增：{last} → {ms}")
+            break
+        last = ms
+        if not orig:
+            bad.append("存在空原文行")
+            break
+        if trans is not None and not isinstance(trans, str):
+            bad.append(f"译文既不是 None 也不是字符串：{trans!r}")
+            break
+        if trans == "":
+            bad.append("译文是空串（约定：没有译文用 None，不用空串）")
+            break
+    return bad
+
+
 # ---------------------------------------------------------------- fnos
 def cmd_fnos(a) -> int:
     """飞牛歌词库：探测 / 差异计划 / 原地回填。默认只读。"""
@@ -417,6 +530,15 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--port", type=int, default=8080)
     v.add_argument("--open", action="store_true")
     v.set_defaults(fn=cmd_serve)
+
+    pr = sub.add_parser("provider", help="歌词源插件：列出 / 自检")
+    prs = pr.add_subparsers(dest="pcmd")
+    pl_ = prs.add_parser("list", help="列出所有歌词源（内置 + 插件）")
+    pl_.set_defaults(fn=cmd_provider_list)
+    pt = prs.add_parser("test", help="对某个源跑一次契约自检")
+    pt.add_argument("name", help="源标识，如 netease / lrclib")
+    pt.add_argument("--file", required=True, help="用来测试的音频文件路径")
+    pt.set_defaults(fn=cmd_provider_test)
     return p
 
 

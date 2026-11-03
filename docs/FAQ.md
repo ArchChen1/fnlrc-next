@@ -181,7 +181,7 @@ mp3 / flac / m4a / wav / ogg / ape / wma / dsf / aac / opus。歌词文件始终
 
 **Q：第三方接口哪天挂了怎么办？**
 数据源做了多源降级（网易云 → LRCLIB → 你配的翻译后端）。某一个源失效时程序自动降级而不是整体失败。
-歌词源目前是两个，加源只需在 `fnlrc/providers.py` 里加一个 `*_fetch()`（见 `docs/ARCHITECTURE.md` 的 provider 章节）。
+歌词源已插件化：加一个源只需在 `$FNLRC_DATA/plugins/` 放一个新文件（实现 `available()` + `fetch()`），**不改核心**；模板见 `docs/provider-template.py`，`fnlrc provider list` 能看每个源的可用性。
 
 真实案例：2026-09 网易云把搜索路由 `/api/search/get/web` 停用了（恒返回 `code:405`，
 HTTP 还是 200），主源等于全废。代码现在按顺序试两条路由 —— 单个源失效不会让整个工具失效。

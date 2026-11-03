@@ -22,7 +22,12 @@ fnlrc/
 │   ├── __init__.py           版本号、对外导出
 │   ├── lrc.py                ★ LRC 解析 / 规整 / 双语合成 / 飞牛规则校验
 │   ├── library.py            ★ 扫描 / 标签 / 编码嗅探 / 纯音乐判定 / 库统计
-│   ├── providers.py          ★ 数据源 + 翻译后端 + 节流重试时限
+│   ├── providers/            ★ 歌词源（协议 + 注册表 + 内置源 + 插件加载）
+│   │   ├── __init__.py        公共工具（脱敏/节流/打分/对齐）+ 翻译后端 + fetch_lyrics 编排
+│   │   ├── base.py            Provider 协议 + LyricResult/Candidate 数据类
+│   │   ├── registry.py        源注册表（按 priority 排序）
+│   │   ├── loader.py          发现 / 加载 $FNLRC_DATA/plugins（失败隔离）
+│   │   └── builtin/           内置源：netease.py / lrclib.py（官方也是插件）
 │   ├── pipeline.py           ★ 单曲决策 + 批量执行（三端唯一入口）
 │   ├── watcher.py            监听文件夹：纯轮询、静默期、搬运、重试、状态落盘
 │   ├── fnos.py               飞牛歌词库：探测 / 差异计划 / 原地回填（**零第三方依赖**）
@@ -48,8 +53,8 @@ fnlrc/
 |---|---|---|
 | `lrc.py` | 文本层的 LRC 一切：解析、去制作名单、时间戳规整、双语合成、规则校验 | 网络、文件系统、UI |
 | `library.py` | 文件系统层的库：遍历、标签、编码、乱码识别、语言预期、统计 | 网络、写入 |
-| `providers.py` | 外部世界的边界：网易云、LRCLIB、远端 API（DeepSeek）；匹配打分与**译文对齐** | 决策（要不要翻、要不要写） |
-| `pipeline.py` | **决策与编排**：选源 → 校验 → 译文对齐/翻译降级 → 重试 → 写/不写 → 结果 | IO 细节、UI |
+| `providers/` | 外部世界的边界：**歌词源**（网易云、LRCLIB、社区插件）经 `Provider` 协议产出 `pairs`；`fetch_lyrics` 按 priority 串行降级；远端翻译后端（DeepSeek）、匹配打分与**译文对齐** | 决策（要不要翻、要不要写） |
+| `pipeline.py` | **决策与编排**：调 `fetch_lyrics` 选源 → 校验 → 译文对齐/翻译降级 → 重试 → 写/不写 → 结果 | IO 细节、UI、具体某个源 |
 | `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重 | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
 | `fnos.py` | 飞牛数据库的只读探测、差异计划、原地回填（已有歌词）与**补建歌词行**（没有歌词的歌，要 `--allow-insert`） | 歌词的获取与翻译（它只负责"把已生成的 `.lrc` 搬进飞牛"） |
 | `store.py` | 任务与结果的持久化、配置与令牌、回滚 | 业务逻辑 |
@@ -161,11 +166,9 @@ class Config:                   # 一次任务的配置（pipeline.Config）
                         └──────┬──────┘
                                │ 每首：
                     ┌──────────▼──────────┐
-                    │ netease_fetch       │  原词 + 译词 + 罗马音
-                    └──────────┬──────────┘
-                         命中？ │ 否
-                    ┌──────────▼──────────┐
-                    │ lrclib_fetch        │  时间轴原词（8s 快速失败）
+                    │ fetch_lyrics()      │  统一降级链：按 priority 问注册表里每个源
+                    │  netease(10) → ...  │  网易云(原词+译词+罗马音) → LRCLIB(时间轴原词)
+                    │  → lrclib(20) → ... │  单个源抛异常被隔离；全炸则报 error
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
@@ -357,7 +360,7 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 ## 十、演进方向
 
 1. **二轮补跑器**：`no_lyrics`/`timeout` 自动重试（清洗后缀、换关键词、用专辑名/罗马音）
-2. **provider 插件化**：`providers/` 目录 + 注册表，社区可加源（QQ/酷狗/Musixmatch）
+2. ~~**provider 插件化**：`providers/` 目录 + 注册表，社区可加源（QQ/酷狗/Musixmatch）~~ —— **已在 M2 落地**（见 ADR-020）。社区新源放 `$FNLRC_DATA/plugins/`，模板见 `docs/provider-template.py`
 3. **翻译质量反馈**：记录人工修改，反哺关键词/模板
 4. **并发**：共享节流器下的多曲并发（对网易云可行，对 LRCLIB 谨慎）
 5. **飞牛应用化**：如果 fnOS 开放第三方应用打包，直接上架

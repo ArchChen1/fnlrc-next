@@ -37,6 +37,11 @@ class Config:
     # 对齐结果过不了飞牛双行规则时会自动退回重抓，所以最坏情况等于关掉它。
     keep_local: bool = True
     limit: int | None = None
+    # 歌词源筛选（M2）：None/空 = 不限制。黑名单优先级高于白名单。
+    # 放在 Config 里而不是让 fetch_lyrics 读全局配置，是为了让 pipeline 保持纯粹、
+    # 单测里不依赖本机 config.json。
+    providers_enabled: list[str] | None = None
+    providers_disabled: list[str] | None = None
 
     def resolved_dump(self) -> str:
         return self.dump_dir or os.path.join(os.getcwd(), "fnlrc_out")
@@ -179,39 +184,33 @@ def process_song(song: lib.Song, cfg: Config, log=None) -> dict:
         return res
 
     dl = time.time() + cfg.deadline_s
-    info = P.netease_fetch(song.title, song.artist, song.duration,
-                           expected=song.expected_lang, deadline=dl, debug=bool(log and False))
+    # 统一降级链：按 priority 依次问注册表里的每个源（网易云 → LRCLIB → …）。
+    # 内置源也走同一协议，新增源只要注册进来就自动进入这条链。
+    src_errors: list[tuple[str, str]] = []
+    result = P.fetch_lyrics(song, cfg, deadline=dl, log=log, errors=src_errors)
     pairs: list[tuple[int, str, str | None, str | None]] = []
     src = ""
-    if info and info.get("pairs"):
-        src = "netease"
-        pairs = list(info["pairs"])
-        res["lyric_lang"] = info.get("lyric_lang")
-        res["matched"] = info.get("matched")
-        res["score"] = info.get("score")
-        res["candidates"] = info.get("candidates") or []
-        res["alternatives"] = info.get("alternatives") or {}
-    else:
-        got = P.lrclib_fetch(song.title, song.artist, song.album, song.duration,
-                             expected=song.expected_lang, deadline=dl)
-        if got and got.get("entries"):
-            if got.get("instrumental"):
-                res.update(status="skip_instrumental", source="lrclib", note="源站标记为纯音乐")
-                res["elapsed_s"] = round(time.time() - t0, 1)
-                return res
-            src = "lrclib"
-            # LRCLIB 只给原词，但要防它把罗马音混排进来
-            orig_lines, roman_lines = P.split_orig_roles(got["entries"])
-            roman_map = {}
-            for ms, t in roman_lines:
-                roman_map.setdefault(ms, t)
-            pairs = [(ms, o, None, roman_map.get(ms)) for ms, o in orig_lines]
-            res["lyric_lang"] = got.get("lyric_lang")
-            res["matched"] = got.get("matched")
-            res["score"] = got.get("score")
-            res["candidates"] = got.get("candidates") or []
+    if result is not None and getattr(result, "instrumental", False):
+        res.update(status="skip_instrumental", source=result.source, note="源站标记为纯音乐")
+        res["elapsed_s"] = round(time.time() - t0, 1)
+        return res
+    if result is not None and result.pairs:
+        src = result.source
+        pairs = list(result.pairs)
+        res["lyric_lang"] = result.lyric_lang
+        res["matched"] = result.matched
+        res["score"] = result.score
+        res["candidates"] = result.candidates or []
+        res["alternatives"] = result.alternatives or {}
 
     if not pairs:
+        # 所有可用的源都取词失败（抛异常）→ 这是"坏"，不是"没有歌词"。
+        # 不这么分的话，一个源崩了会被误报成 no_lyrics，用户永远等不到它自愈。
+        if src_errors:
+            detail = "；".join(f"{n}: {m}" for n, m in src_errors)
+            res.update(status="error", note=P.mask_secret(f"歌词源取词失败 —— {detail}"))
+            res["elapsed_s"] = round(time.time() - t0, 1)
+            return res
         # 只有文件名/目录名像纯音乐，没有权威标记（language=zxx 或源站 instrumental）。
         # 报成「跳过」会让它进不了任何重试队列 —— 匹配失败就永远查不出来。
         looks_inst = bool(lib.INSTRUMENTAL_HINT.search(song.title)) or "纯音乐" in song.rel

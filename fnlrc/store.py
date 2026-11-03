@@ -47,6 +47,11 @@ CONFIG_KEYS = (
     "watch_quiet_s",       # 落盘静默期
     "watch_poll_s",        # 轮询间隔
     "watch_autostart",     # 服务启动时是否自动开监听
+    # 歌词源插件（M2）
+    "providers_enabled",   # 白名单：非空时只启用列出的源
+    "providers_disabled",  # 黑名单：优先级高于白名单
+    "provider_keys",       # {源名: key}，各插件的自有凭据，与 remote_api_key 同等敏感
+    "plugins_dir",         # 自定义插件目录（留空= $FNLRC_DATA/plugins）
 )
 SECRET_KEYS = ("remote_api_key",)
 # 引导口径的版本号。将来引导流程大改（新增步骤）时可抬高它，让老用户再走一次。

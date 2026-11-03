@@ -256,6 +256,8 @@ def _config_from(payload: dict) -> pl.Config:
         keep_local=(bool(payload["keep_local"]) if "keep_local" in payload
                     else bool(cfg.get("keep_local", True))),
         limit=payload.get("limit"),
+        providers_enabled=cfg.get("providers_enabled") or None,
+        providers_disabled=cfg.get("providers_disabled") or None,
     )
 
 

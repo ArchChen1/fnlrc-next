@@ -14,8 +14,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
-from . import library as lib
-from . import lrc as L
+from .. import library as lib
+from .. import lrc as L
 
 UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
@@ -85,6 +85,21 @@ def _throttle(kind: str) -> None:
     _last_call[kind] = time.time()
 
 
+# 给插件用的公开别名：插件**不应**直接碰 `_throttle` / `_req` 这类私有名，
+# 用公开名可以让内部实现随意重构。二者都保留原名（既有一堆调用与打桩点依赖它们）。
+throttle = _throttle
+
+
+def _register_source_interval(kind: str, interval: float) -> None:
+    """插件声明自己的节流间隔。缺省时新源用 1.0s（保守，先别把源站惹毛）。"""
+    _MIN_INTERVAL.setdefault(kind, interval)
+    _last_call.setdefault(kind, 0.0)
+
+
+# 给插件用的公开别名（见 throttle 处的说明）。
+register_source_interval = _register_source_interval
+
+
 def _req(method: str, url: str, *, retries: int = 3, kind: str | None = None,
          deadline: float | None = None, **kw):
     """带指数退避 + 节流 + 总时限的请求。放弃时返回 None（由调用方决定降级）。"""
@@ -102,6 +117,10 @@ def _req(method: str, url: str, *, retries: int = 3, kind: str | None = None,
         except Exception:
             time.sleep(1.0 * (attempt + 1))
     return None
+
+
+# 给插件用的公开别名（见 throttle 的说明）。
+req = _req
 
 
 # ---------------------------------------------------------------- 工具
@@ -194,6 +213,10 @@ def _score(cand_title, cand_artists, cand_dur_ms, title, artist, duration):
         s += 3.0 if d <= 3 else (1.5 if d <= 8 else -1.5)
     s += version_penalty(title, cand_title)
     return s
+
+
+# 给插件用的公开别名（见 _throttle 处的说明）。
+score = _score
 
 
 # 语言一致性的加权值。**只加权，绝不淘汰候选** ——
@@ -825,3 +848,56 @@ def remote_test(base_url: str, api_key: str, model: str, timeout: int = 20) -> t
         return False, err
     return False, ("模型返回了空内容。多半是模型名不对，或该模型的思考链吃光了输出预算"
                    "（DeepSeek 当前可用的是 deepseek-flash / deepseek-v4-pro）")
+
+
+# ---------------------------------------------------------------- 源编排（M2）
+def fetch_lyrics(song, cfg, *, deadline: float | None = None, log=None, errors=None):
+    """统一降级链：按 priority 依次问每个可用源，第一个给出有用结果的即采用。
+
+    与旧 `netease_fetch` / `lrclib_fetch` 的区别：它遍历**注册表**而不是写死两个源，
+    所以新增一个源只要注册进来就自动进入降级链，`pipeline` 一行不用改。
+
+    返回 `base.LyricResult` 或 None。**一个源取词抛异常会被吞掉并继续下一个源**
+    （一个坏源/坏插件不能拖垮整首歌）。抛异常的源会以 `(源名, 脱敏后的原因)`
+    追加进 `errors`（如果调用方传了列表）—— 这样「所有源都炸了」仍能被上层
+    报成 error，而不是被误报成「没有歌词」。
+    """
+    from . import registry
+    from .builtin import register_builtins
+
+    register_builtins()          # 幂等：保证内置源始终在册（调用方忘了加载也不出错）
+
+    enabled = {n for n in (getattr(cfg, "providers_enabled", None) or []) if n}
+    disabled = {n for n in (getattr(cfg, "providers_disabled", None) or []) if n}
+
+    for p in registry.all_providers():
+        name = getattr(p, "name", "?")
+        if name in disabled:
+            continue
+        if enabled and name not in enabled:
+            continue
+        try:
+            ok, why = p.available()
+        except Exception as e:
+            msg = mask_secret(e)
+            if errors is not None:
+                errors.append((name, msg))
+            if log:
+                log(f"   源 {name} 自检异常：{msg}")
+            continue
+        if not ok:
+            if log:
+                log(f"   跳过源 {name}：{why}")
+            continue
+        try:
+            res = p.fetch(song, cfg, deadline=deadline)
+        except Exception as e:
+            msg = mask_secret(e)
+            if errors is not None:
+                errors.append((name, msg))
+            if log:
+                log(f"   源 {name} 取词异常（继续下一个）：{msg}")
+            continue
+        if res and (res.pairs or getattr(res, "instrumental", False)):
+            return res
+    return None
