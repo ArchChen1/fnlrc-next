@@ -32,6 +32,7 @@ def _config_from_args(a) -> pl.Config:
         dump_dir=getattr(a, "dump", None),
         force=bool(getattr(a, "force", False)),
         translate=getattr(a, "translate", None) or cfg.get("translate", "source"),
+        translate_order=cfg.get("translate_order") or None,
         remote_base_url=getattr(a, "remote_base", None) or cfg.get("remote_base_url", ""),
         remote_api_key=getattr(a, "remote_key", None) or store.effective_api_key(cfg),
         remote_model=getattr(a, "remote_model", None) or cfg.get("remote_model", ""),

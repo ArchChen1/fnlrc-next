@@ -98,6 +98,9 @@ const STRINGS = {
   "backend.remote.hint": "Uses your own DeepSeek key to translate the lines the source left blank. Lyric text is sent out.",
   "backend.none": "No translation",
   "backend.none.hint": "Only fixes formatting and mojibake, produces no translation.",
+  "backend.chain_intro": "Tried top to bottom. Whatever the first one leaves blank is passed to the next. Drag the handle on the left to reorder.",
+  "backend.chain_now": "Current order: {chain}",
+  "backend.need_one": "Keep at least one translation backend",
 
   // ── report filters ────────────────────────────────────
   "filter.all": "All",

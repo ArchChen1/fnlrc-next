@@ -351,6 +351,32 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 /* 没有内容时连盒子都不要占位 */
 .toast:empty{display:none}
 
+/* ── 翻译后端降级链（M6）：可拖动排序的行 ───────────────────── */
+.chainIntro{margin:0 0 .7rem}
+.chainList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}
+.chainRow{display:grid;grid-template-columns:1.4rem auto 1fr auto;align-items:center;
+          gap:.7rem;padding:.7rem .9rem;border:1px solid var(--line);
+          border-radius:1rem;background:rgba(255,255,255,.03);
+          transition:background-color .2s,border-color .2s,opacity .2s}
+.chainRow:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.35)}
+.chainRow.dragging{opacity:.4}
+.chainRow.over{border-color:#fff;background:rgba(255,255,255,.12)}
+.chainGrip{cursor:grab;color:rgba(255,255,255,.4);font-size:.9rem;letter-spacing:-2px;
+           user-select:none;text-align:center}
+.chainGrip:active{cursor:grabbing}
+.chainCheck{display:flex;align-items:center;gap:.5rem;cursor:pointer;white-space:nowrap}
+.chainLabel{font-weight:600;font-size:.9375rem}
+.chainHint{font-size:.75rem;line-height:1.5;color:rgba(255,255,255,.5);min-width:0}
+.chainMove{display:flex;gap:.1rem}
+.chainMove .btn-ghost{padding:.25rem .45rem;font-size:.875rem}
+.chainMove .btn-ghost:disabled{opacity:.25;cursor:not-allowed}
+@media(max-width:640px){
+  /* 手机上把说明文字换到下一行，否则三列挤成一条看不清 */
+  .chainRow{grid-template-columns:1.4rem auto auto;gap:.4rem .6rem}
+  .chainHint{grid-column:1 / -1}
+  .chainMove .btn-ghost{min-height:44px;min-width:44px}
+}
+
 /* 动态插入的目录列表行 */
 .diritem{width:100%;justify-content:flex-start;margin-bottom:.4rem}
 .dirlist{max-height:44vh;overflow-y:auto}

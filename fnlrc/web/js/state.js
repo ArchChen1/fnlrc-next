@@ -36,11 +36,20 @@ export function tone(status) {
 /**
  * 翻译后端。**必须用函数**而不是常量数组 —— 模块加载时还没确定语言
  * （`initLang()` 在 boot() 里才跑），常量会把中文烤死在里面。
+ *
+ * M6 起「不翻译」从列表里删掉了：它和「源站译词」在服务端是同一件事
+ * （都不调后端），留着只是让用户多一个看不懂的选项。
+ * 真正"不翻译"的语义改由「链里没有可用后端」表达。
  */
 export function backends() {
-  return ["source", "remote", "none"].map(v => ([
+  return ["source", "remote"].map(v => ([
     v, t("backend." + v), t("backend." + v + ".hint")
   ]));
+}
+
+/** 降级链里每一项的短说明（拖拽行下方那句） */
+export function backendDesc(v) {
+  return t("backend." + v + ".desc");
 }
 
 export const FILTER_KEYS = ["all", "written", "written_mono",
@@ -69,5 +78,7 @@ export const S = {
   /** 当前 Tab 序号（0..4），M5 起代替原来的 scenes */
   tab: 0,
   /** 进入流程的模式：""（在 dashboard）/ "auto"（自动监测）/ "manual"（立即执行） */
-  mode: ""
+  mode: "",
+  /** 翻译降级链（有序，M6）。空 = 还没读过配置，用默认 [] */
+  translateOrder: null
 };

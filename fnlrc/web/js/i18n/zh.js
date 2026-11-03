@@ -98,6 +98,9 @@ const STRINGS = {
   "backend.remote.hint": "用自己的 DeepSeek key 补翻源站没给译文的那些行。会把歌词文本发出去。",
   "backend.none": "不翻译",
   "backend.none.hint": "只修格式与乱码，不生成译文。",
+  "backend.chain_intro": "从上往下依次尝试。排在前面的先用，补不上的行再交给下一个。拖动左侧握把可以调顺序。",
+  "backend.chain_now": "当前顺序：{chain}",
+  "backend.need_one": "至少要保留一个翻译后端",
 
   // ── 报告筛选 ──────────────────────────────────────────
   "filter.all": "全部",

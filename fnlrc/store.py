@@ -27,6 +27,9 @@ APP = "fnlrc"
 # 漏掉一个敏感字段就是泄露。
 CONFIG_KEYS = (
     "translate",
+    # 翻译降级链（M6）：按用户拖拽的顺序逐家尝试。
+    # 空 = 沿用单后端的 translate，老配置/老前端行为不变。
+    "translate_order",
     "remote_base_url",
     "remote_model",
     "remote_api_key",

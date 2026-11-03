@@ -21,6 +21,9 @@ class Config:
     force: bool = False                 # 已有合规双语文件也重做
     # source=只用源站译词（不调任何后端）| remote=用户自己的 OpenAI 兼容端点 | none=同 source
     translate: str = "source"
+    # 翻译降级链（M6）：用户可拖拽排序的后端列表，按顺序逐家尝试补齐缺译文行。
+    # None = 走老的单后端语义（`translate`），保证旧调用方与命令行的行为一字不差。
+    translate_order: list[str] | None = None
     remote_base_url: str = ""
     # repr=False：dataclass 的默认 repr 会把 key 原样打出来，任何 print(cfg) 或异常
     # 路径里的记录都会泄露它。
@@ -87,6 +90,61 @@ def decide(song: lib.Song, cfg: Config) -> dict:
 
 
 # ------------------------------------------------------------------ 翻译后端
+def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = None,
+                     log=None) -> tuple[list[str] | None, str]:
+    """按用户排序的降级链补齐译文（M6）。
+
+    顺序完全由用户决定：把「我的 API」拖到第一位，就等于「不管源站给没给，都先问 AI」。
+    每一环只处理**前面没补上的那些行**，补上了就退出。
+
+    `source` 是「源站译词」这一环 —— 它表示"到此为止，用源站已有的译文"，不是一次调用。
+    所以它出现在任何位置时都只是终止点，后面的后端不再被尝试。
+
+    全部走完仍有缺口时：返回已补齐的部分（可能含空串），调用方按空串当单语处理。
+    """
+    order = [b for b in (cfg.translate_order or []) if b in ("source", "remote")]
+    if not order:
+        return _translate_missing(lines, cfg, deadline=deadline, log=log)
+    if not lines:
+        return [], "none"
+
+    out: list[str] = [""] * len(lines)
+    used: list[str] = []
+    remaining = list(range(len(lines)))
+
+    for backend in order:
+        if not remaining:
+            break
+        if backend == "source":
+            # 源站译词已经写在 pairs 里了，这一环不产生新译文，只结束尝试。
+            used.append("source")
+            break
+        if backend == "remote":
+            if not (cfg.remote_base_url and cfg.remote_model):
+                if log:
+                    log("   还没配 Base URL 或模型名，跳过翻译")
+                continue
+            got, _ = _translate_missing([lines[i] for i in remaining],
+                                        Config(**{**cfg.__dict__, "translate": "remote"}),
+                                        deadline=deadline, log=log)
+            if not got:
+                continue
+            used.append("remote")
+            left = []
+            for k, i in enumerate(remaining):
+                text = (got[k] or "").strip()
+                if text:
+                    out[i] = text
+                else:
+                    left.append(i)
+            remaining = left
+
+    missing_any = any(not out[i] for i in remaining)
+    if not used:
+        return None, "none"
+    return out, "+".join(used) if missing_any else "+".join(used)
+
+
 def _translate_missing(lines: list[str], cfg: Config, deadline: float | None = None,
                        log=None) -> tuple[list[str] | None, str]:
     """补齐源站没给出译文的那些行。→ (与输入等长的译文列表 或 None, 后端串)。
@@ -240,8 +298,12 @@ def process_song(song: lib.Song, cfg: Config, log=None) -> dict:
         if missing:
             lines = [pairs[i][1] for i in missing]
             say(f"   翻译 {len(lines)} 行（后端 {cfg.translate}）")
-            trans, backend = _translate_missing(
-                lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say)
+            if cfg.translate_order:
+                trans, backend = _translate_chain(
+                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say)
+            else:
+                trans, backend = _translate_missing(
+                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say)
             res["backend"] = backend
             if trans is not None:
                 for k, i in enumerate(missing):

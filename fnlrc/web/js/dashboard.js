@@ -36,7 +36,6 @@ export function setView(view) {
 
 export function openFlow(mode) {
   S.mode = mode;
-  // 立即执行：先记下自动监测那份配置，退出时不用恢复 —— 因为根本不写盘
   setView("flow");
 }
 

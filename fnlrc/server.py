@@ -150,6 +150,7 @@ def get_config():
     key = store.effective_api_key(cfg)
     return {
         "translate": cfg.get("translate", "source"),
+        "translate_order": cfg.get("translate_order") or [],
         "remote_base_url": cfg.get("remote_base_url", ""),
         "remote_model": cfg.get("remote_model", ""),
         "remote_timeout": cfg.get("remote_timeout", 60),
@@ -258,6 +259,7 @@ def _config_from(payload: dict) -> pl.Config:
         dump_dir=payload.get("dump_dir"),
         force=bool(payload.get("force")),
         translate=payload.get("translate") or cfg.get("translate", "source"),
+        translate_order=payload.get("translate_order") or cfg.get("translate_order") or None,
         remote_base_url=cfg.get("remote_base_url", ""),
         remote_api_key=store.effective_api_key(cfg),
         remote_model=cfg.get("remote_model", ""),

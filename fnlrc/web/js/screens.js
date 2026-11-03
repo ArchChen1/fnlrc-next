@@ -93,6 +93,14 @@ export function currentTab() {
 export function applyMode() {
   const auto = S.mode === "auto";
 
+  // 自动监测会把配置落盘，所以链要与服务端已存的保持一致；
+  // 立即执行则每次从已存配置起步，用户改了只影响这一次。
+  if (S.config && Array.isArray(S.config.translate_order) && S.config.translate_order.length) {
+    S.translateOrder = S.config.translate_order.slice();
+  } else if (!S.translateOrder) {
+    S.translateOrder = ["source", "remote"];
+  }
+
   $$(".tab").forEach(el => {
     const i = +el.dataset.tab;
     el.hidden = auto && i >= AUTO_TABS;
@@ -220,36 +228,146 @@ export function renderSummary(s, root) {
 
 export function initPreview() {
   renderBackends();
-  $$('input[name=backend]').forEach(r => r.addEventListener("change", showBackendHint));
-  showBackendHint();
-
   $("#doPreview").addEventListener("click", doPreview);
   $("#doRun").addEventListener("click", doRun);
   $("#doStop").addEventListener("click", doStop);
 }
 
-/** 切语言后要重画后端选择（名字和说明都是翻译过的） */
-export function renderBackends() {
-  const cur = currentBackend();
-  // 两列排布：五个后端竖着排会把这屏撑出视口（skill 禁止内容超屏）
-  $("#backendPick").className = "grid g2";
-  $("#backendPick").innerHTML = backends().map(([v, label]) =>
-    `<label class="row checkline" style="margin-bottom:.35rem">
-       <input type="radio" name="backend" value="${v}" ${v === cur ? "checked" : ""}>
-       <span>${esc(label)}</span>
-     </label>`).join("");
-  $$('input[name=backend]').forEach(r => r.addEventListener("change", showBackendHint));
-  showBackendHint();
+/** 当前降级链（有序）。空 = 还没配过，用默认值 */
+export function currentOrder() {
+  return S.translateOrder && S.translateOrder.length
+    ? S.translateOrder.slice()
+    : ["source", "remote"];
 }
 
+/** 兼容旧接口：链里的第一项当作「主后端」 */
 export function currentBackend() {
-  const picked = $$('input[name=backend]').find(r => r.checked);
-  return picked ? picked.value : "source";
+  return currentOrder()[0] || "source";
 }
 
-function showBackendHint() {
-  const row = backends().find(b => b[0] === currentBackend());
-  $("#backendHint").textContent = row ? row[2] : "";
+/**
+ * 渲染翻译后端 = **可拖动排序的降级链**（M6）。
+ *
+ * 为什么改成排序而不是单选：以后会有更多 provider，用户只要调整顺序就能表达
+ * 「先问源站、不够再问 AI」或反过来。多选勾决定这一环**参不参与**。
+ *
+ * 交互刻意用原生 HTML5 drag & drop + 上下按钮双通道：
+ * 手机上拖拽不稳，按钮是保底手段（触控目标 ≥44px）。
+ */
+export function renderBackends() {
+  const box = $("#backendPick");
+  if (!box) return;
+  const order = currentOrder();
+  const all = backends();          // [[v, label, hint], ...]
+  const labelOf = Object.fromEntries(all.map(([v, l]) => [v, l]));
+  const hintOf = Object.fromEntries(all.map(([v, , h]) => [v, h]));
+
+  box.className = "chain";
+  box.innerHTML = `
+    <p class="small chainIntro" data-i18n="backend.chain_intro">
+      从上往下依次尝试。排在前面的先用，补不上的行再交给下一个。
+    </p>
+    <ol class="chainList" id="chainList">
+      ${order.map((v, i) => `
+        <li class="chainRow" draggable="true" data-backend="${esc(v)}" data-idx="${i}">
+          <span class="chainGrip" aria-hidden="true">⋮⋮</span>
+          <label class="chainCheck">
+            <input type="checkbox" class="chainEnable" checked>
+            <span class="chainLabel">${esc(labelOf[v] || v)}</span>
+          </label>
+          <span class="chainHint">${esc(hintOf[v] || "")}</span>
+          <span class="chainMove">
+            <button class="btn-ghost chainUp" type="button" title="上移" ${i === 0 ? "disabled" : ""}>↑</button>
+            <button class="btn-ghost chainDown" type="button" title="下移" ${i === order.length - 1 ? "disabled" : ""}>↓</button>
+          </span>
+        </li>`).join("")}
+    </ol>
+    <p class="note" style="margin-top:.7rem" id="backendHint"></p>`;
+
+  // 勾选：只有勾上的项参与降级（至少留一个）
+  $$(".chainEnable", box).forEach(cb => cb.addEventListener("change", () => {
+    const enabled = enabledOrder();
+    if (!enabled.length) { cb.checked = true; toast(t("backend.need_one")); return; }
+    S.translateOrder = enabled;
+    updateChainHint();
+  }));
+
+  // 上下按钮：手机/键盘的保底排序手段
+  $$(".chainUp", box).forEach(b => b.addEventListener("click", () => moveBy(b, -1)));
+  $$(".chainDown", box).forEach(b => b.addEventListener("click", () => moveBy(b, 1)));
+
+  // 原生拖拽
+  bindDrag(box);
+  updateChainHint();
+}
+
+/** 当前链里被勾选（启用）的部分 */
+function enabledOrder() {
+  return $$("#chainList .chainRow")
+    .filter(li => li.querySelector(".chainEnable").checked)
+    .map(li => li.dataset.backend);
+}
+
+function moveBy(btn, delta) {
+  const order = enabledOrder();
+  const li = btn.closest(".chainRow");
+  const v = li.dataset.backend;
+  const from = order.indexOf(v);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= order.length) return;
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  S.translateOrder = order;
+  renderBackends();
+}
+
+/** dragstart 记下来源，dragover 时实时挪位（比只换 class 更直观） */
+function bindDrag(box) {
+  let dragged = null;
+  $$(".chainRow", box).forEach(li => {
+    li.addEventListener("dragstart", e => {
+      dragged = li;
+      li.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", li.dataset.backend); } catch (err) { /* 忽略 */ }
+    });
+    li.addEventListener("dragend", () => {
+      li.classList.remove("dragging");
+      $$(".chainRow", box).forEach(x => x.classList.remove("over"));
+      dragged = null;
+      S.translateOrder = enabledOrder();
+      updateChainHint();
+    });
+    li.addEventListener("dragover", e => {
+      e.preventDefault();
+      if (!dragged || dragged === li) return;
+      li.classList.add("over");
+    });
+    li.addEventListener("dragleave", () => li.classList.remove("over"));
+    li.addEventListener("drop", e => {
+      e.preventDefault();
+      li.classList.remove("over");
+      if (!dragged || dragged === li) return;
+      const rows = $$(".chainRow", box);
+      const from = rows.indexOf(dragged), to = rows.indexOf(li);
+      if (from < 0 || to < 0) return;
+      const nodes = rows.slice();
+      nodes.splice(to, 0, nodes.splice(from, 1)[0]);
+      // 直接把 DOM 顺序定下来，再回读成数据 —— 避免状态与画面不同步
+      const list = $("#chainList");
+      nodes.forEach(n => list.appendChild(n));
+      S.translateOrder = enabledOrder();
+      renderBackends();
+    });
+  });
+}
+
+function updateChainHint() {
+  const el = $("#backendHint");
+  if (!el) return;
+  const labels = enabledOrder().map(v => backends().find(b => b[0] === v)?.[1] || v);
+  el.textContent = labels.length
+    ? t("backend.chain_now", { chain: labels.join(" → ") })
+    : t("backend.need_one");
 }
 
 async function doPreview() {
@@ -298,7 +416,8 @@ async function doRun() {
     force: $("#forceMode").checked,
     // 外文单语歌词：保留本地时间轴只补译文（默认开）。复选框在设置面板里。
     keep_local: !$("#cfgKeepLocal") || $("#cfgKeepLocal").checked,
-    translate: currentBackend()
+    translate: currentBackend(),
+    translate_order: enabledOrder()
   };
 
   $("#doRun").disabled = true;
@@ -348,6 +467,7 @@ async function runAuto() {
     // 只落盘「自动监测」关心的这几项；其余（API key 等）走设置面板
     await api("/api/config", {
       translate: currentBackend(),
+      translate_order: enabledOrder(),
       keep_local: !$("#cfgKeepLocal") || $("#cfgKeepLocal").checked,
       backup: $("#cfgBackup") ? $("#cfgBackup").checked : true
     });
