@@ -255,6 +255,38 @@ export function initPick() {
     localStorage.setItem("fnlrc_root", e.target.value.trim()));
   $("#browse").addEventListener("click", browse);
   $("#doScan").addEventListener("click", startScan);
+  restoreRoot();
+}
+
+/**
+ * 把「上次用的音乐库」填回输入框。
+ *
+ * 桌面版每次启动都绑**随机端口**，而 localStorage 是按 origin（含端口）隔离的 ——
+ * 重启后 localStorage 是空的，用户就得每次重新选库、重新扫描。
+ * 所以这里除了 localStorage，还回退到服务端配置里的 `last_root`：
+ * 那才是真正跨启动持久的那一份。
+ */
+async function restoreRoot() {
+  const input = $("#root");
+  if (!input) return;
+  if (input.value.trim()) return;      // localStorage 已经有，别覆盖用户刚填的
+
+  // 先看有没有已经拉到手的配置（dashboard 启动时会读一次）
+  let last = (S.config && S.config.last_root) || "";
+  if (!last) {
+    try {
+      const c = await api("/api/config");
+      S.config = c;
+      last = c.last_root || "";
+    } catch (e) {
+      return;                          // 读不到就算了，用户照常手填
+    }
+  }
+  // 等待期间用户可能已经自己填了，别再盖掉
+  if (last && !input.value.trim()) {
+    input.value = last;
+    localStorage.setItem("fnlrc_root", last);
+  }
 }
 
 function browse() {

@@ -563,6 +563,18 @@ def watch_start(request: Request, x_fnlrc_token: str | None = Header(default=Non
     require_token(request, x_fnlrc_token)
     with _watch_lock:
         if _watch_is_running():
+            # 已经在跑：不要直接 return，否则刚存进 config.json 的新设置
+            # （尤其是「预览模式」→ watch_write）永远到不了正在运行的 watcher。
+            # 前端「保存并开始监测」在已运行时走的就是这条路。
+            wc_now = store.watch_config()
+            w_now = _watch.get("watcher")
+            if w_now is not None:
+                base = _config_from({"write": bool(wc_now["watch_write"])})
+                base.force = False
+                w_now.reconfigure(
+                    cfg=base, roots=[wc_now["watch_root"]],
+                    after=wc_now["watch_after"], move_to=wc_now["watch_move_to"],
+                    quiet_s=wc_now["watch_quiet_s"], poll_s=wc_now["watch_poll_s"])
             return {"ok": True, "already": True, "status": watch_status()}
         wc = store.watch_config()
         err = _watch_validate(wc)

@@ -145,6 +145,28 @@ class FolderWatcher:
         self.counts: dict[str, int] = {}
         self._load_state()
 
+    def reconfigure(self, *, cfg: pl.Config | None = None, roots=None, after=None,
+                    move_to=None, quiet_s=None, poll_s=None) -> None:
+        """运行中就地换配置，不用停掉再起。
+
+        之前「保存并开始监测」在已经在监听时走的是 `/api/watch/start` 的
+        `already=True` 短路分支 —— 配置存进了 config.json，但**正在跑的这个
+        watcher 还拿着旧的一份**：取消勾选预览模式后仍然只写预览目录，就是这个原因。
+        现在 start 发现已在运行时会调这里把新配置推下去。
+        """
+        if cfg is not None:
+            self.cfg = cfg
+        if roots is not None:
+            self.roots = [r for r in roots if r]
+        if after is not None:
+            self.after = after if after in ("keep", "copy", "move") else "keep"
+        if move_to is not None:
+            self.move_to = move_to or ""
+        if quiet_s is not None:
+            self.quiet_s = max(0.0, float(quiet_s))
+        if poll_s is not None:
+            self.poll_s = max(0.2, float(poll_s))
+
     # ------------------------------------------------------------ 状态持久化
     def _load_state(self) -> None:
         try:

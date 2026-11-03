@@ -1,4 +1,4 @@
-"""HTTP 层与持久层。
+﻿"""HTTP 层与持久层。
 
 重点全在**安全**上：key 不回显、写操作要令牌、跨站要拦、令牌只在回环访问时注入。
 这些都是"错了会真出事"的地方，所以逐条钉死。
@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fnlrc import store
+from fnlrc import server as server_mod
 
 
 @pytest.fixture
@@ -526,6 +527,60 @@ def test_启动后状态变为running(client, auth, tmp_path):
     # 收工
     assert client.post("/api/watch/stop", headers=auth).status_code == 200
     assert client.get("/api/watch/status").json()["running"] is False
+
+
+def test_已在监听时改配置要热更新到运行中的watcher(client, auth, tmp_path):
+    """回归：取消勾选「预览模式」后再点「保存并开始监测」，新配置必须真的生效。
+
+    老实现里 `/api/watch/start` 在 already=True 时直接 return，
+    存进 config.json 的 watch_write 永远到不了正在跑的那个 watcher ——
+    界面显示"已写入"，实际还只写预览目录。
+    """
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_write": False,
+                       "watch_poll_s": 0.3, "watch_quiet_s": 0})
+
+    assert client.post("/api/watch/start", headers=auth).status_code == 200
+    w = server_mod._watch["watcher"]
+    assert w.cfg.write is False, "先按预览模式跑"
+
+    # 用户取消勾选预览模式 → 前端先存配置，再点「保存并开始监测」
+    client.post("/api/config", headers=auth, json={"watch_write": True})
+    r = client.post("/api/watch/start", headers=auth)
+    assert r.json().get("already") is True
+    assert server_mod._watch["watcher"] is w, "应就地换配置，而不是重建线程"
+    assert w.cfg.write is True, "热更新后必须真的开始写库"
+
+    # 反向：切回预览也要立刻生效
+    client.post("/api/config", headers=auth, json={"watch_write": False})
+    client.post("/api/watch/start", headers=auth)
+    assert w.cfg.write is False
+
+    client.post("/api/watch/stop", headers=auth)
+
+
+def test_重启后能拿到上次的音乐库路径(client, auth, tmp_path):
+    """回归：桌面版每次启动绑随机端口，localStorage 按 origin 隔离 → 重启即丢。
+
+    服务端 config.json 里的 last_root 才是跨启动持久的那一份，
+    /api/config 必须把它交给前端。
+    """
+    lib = tmp_path / "music"
+    lib.mkdir()
+    (lib / "song.flac").write_bytes(b"")
+    r = client.post("/api/scan", json={"root": str(lib), "persist": True})
+    assert r.status_code == 200
+
+    d = client.get("/api/config").json()
+    assert d["last_root"] == str(lib), "重启后前端要靠它把路径填回来"
+
+    # 「立即执行」不落盘：这次选的库不该顶掉长期配置
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.flac").write_bytes(b"")
+    client.post("/api/scan", json={"root": str(other), "persist": False})
+    assert client.get("/api/config").json()["last_root"] == str(lib)
 
 
 # ---------------------------------------------------------------- 人工翻译接口（M3）
