@@ -312,6 +312,9 @@ const STRINGS = {
   "history.empty": "No past jobs yet",
   "history.view": "View",
   "history.written": "wrote {n}",
+  "history.watch_badge": "Auto",
+  "history.manual_badge": "Manual",
+  "history.watch_hint": "Handled automatically by the watcher (everything processed in the same day is grouped here)",
   "history.failed": "Could not read history: {err}",
   "history.report_failed": "Could not read the report: {err}",
 

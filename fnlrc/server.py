@@ -504,6 +504,67 @@ def manual_save(request: Request, payload: dict = Body(...),
 
 
 # ---------------------------------------------------------------- 监听（M1）
+class _WatchRun:
+    """把一次监听会话里处理过的歌攒成一份可查的历史报告。
+
+    为什么需要它：监听是**常驻**的，没有"这一批跑完了"的边界。但用户看「历史任务」
+    时期望能看到"刚才自动处理了哪些歌"。所以这里按天开一个会话：同一天内处理过的
+    歌累加到同一份报告里，跨天则新开一份。报告写进 `jobs/<id>.json`，
+    「历史」和「报告」页就能直接打开它，跟手动跑的任务长得一样。
+
+    报告 id 前缀 `watch-` 便于识别来源；`root` 用监听目录，`started_at` 是会话开始时间。
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.job_id = ""
+        self.root = ""
+        self.started_at = 0.0
+        self.results: list[dict] = []
+        self.stats: dict = {}
+
+    def _new_session(self, root: str) -> None:
+        self.job_id = "watch-" + time.strftime("%Y%m%d-%H%M%S")
+        self.root = root or ""
+        self.started_at = time.time()
+        self.results = []
+        self.stats = {}
+
+    def reset(self) -> None:
+        with self._lock:
+            self.job_id = ""
+            self.root = ""
+            self.started_at = 0.0
+            self.results = []
+            self.stats = {}
+
+    def add(self, result: dict, roots: list[str]) -> None:
+        """收一首的结果，累加进当前会话并落盘。"""
+        from . import pipeline as _pl
+
+        with self._lock:
+            root = roots[0] if roots else ""
+            # 换了一天 / 换了监听目录 / 还没开过 → 开新会话
+            if (not self.job_id or root != self.root
+                    or time.strftime("%Y%m%d") not in self.job_id):
+                self._new_session(root)
+            self.results.append(result)
+            self.stats = _pl.summarize_stats(self.results)
+            try:
+                store.save_report(self.job_id, {
+                    "job_id": self.job_id, "root": self.root,
+                    "started_at": self.started_at,
+                    "elapsed_s": round(time.time() - self.started_at, 1),
+                    "stats": self.stats, "results": list(self.results),
+                    "trigger": "watch",
+                })
+            except Exception as e:
+                print(f"监听报告写入失败：{P.mask_secret(str(e))}", file=sys.stderr)
+
+
+_watch_run = _WatchRun()
+
+
 def _watch_build(cfg: dict):
     """按配置构造一个 FolderWatcher。配置的默认值来自 store.watch_config()。"""
     from . import watcher as W
@@ -518,11 +579,15 @@ def _watch_build(cfg: dict):
         if q is not None:
             q.put(ev)
 
+    def on_result(res):
+        # 攒进历史报告 —— 监听处理过的歌也要能在「历史任务」里看到
+        _watch_run.add(res, [wc["watch_root"]])
+
     w = W.FolderWatcher(
         roots=[wc["watch_root"]], cfg=base,
         after=wc["watch_after"], move_to=wc["watch_move_to"],
         quiet_s=wc["watch_quiet_s"], poll_s=wc["watch_poll_s"],
-        on_event=on_event, should_stop=stop.is_set)
+        on_event=on_event, should_stop=stop.is_set, on_result=on_result)
     return w, stop, wc
 
 
@@ -603,6 +668,8 @@ def watch_stop(request: Request, x_fnlrc_token: str | None = Header(default=None
         _watch["thread"] = None
         _watch["stop"] = None
         # watcher 保留，便于 /status 回显最后一次的 counts
+    # 会话结束：下次再监听重新开一份报告，别把两段不相干的处理混在一起
+    _watch_run.reset()
     return {"ok": True, "status": watch_status()}
 
 
@@ -767,7 +834,8 @@ def fnos_apply(request: Request, payload: dict = Body(...),
 # 放在最后：显式的 "/" 路由先匹配（它需要在回环访问时注入令牌），
 # 其余路径（/styles.css、/js/*.js）交给静态目录。
 # 前端拆成多文件而不是单个 index.html：几件事的复杂度不同（设计 token / 场景渲染 /
-# 面板 / 目录浏览），塞进一个文件只会都变难读。用原生 ES module，仍然零构建步骤。@app.on_event("startup")
+# 面板 / 目录浏览），塞进一个文件只会都变难读。用原生 ES module，仍然零构建步骤。
+@app.on_event("startup")
 def _maybe_autostart_watch():
     """服务启动时按配置自动开监听（`watch_autostart`，默认关）。"""
     if not store.watch_config().get("watch_autostart"):

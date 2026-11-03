@@ -122,7 +122,8 @@ class FolderWatcher:
 
     def __init__(self, roots, cfg: pl.Config, after: str = "keep", move_to: str = "",
                  quiet_s: float = 8, poll_s: float = 5, on_event=None, should_stop=None,
-                 state_path_override: str | None = None, dry_run: bool = False, log=None):
+                 state_path_override: str | None = None, dry_run: bool = False, log=None,
+                 on_result=None):
         self.roots = [r for r in roots if r]
         self.cfg = cfg
         self.after = after if after in ("keep", "copy", "move") else "keep"
@@ -133,6 +134,8 @@ class FolderWatcher:
         self.should_stop = should_stop
         self.dry_run = dry_run
         self._log = log or (lambda *_: None)
+        # 每处理完一首回调一次，给调用方攒历史报告用（CLI 不传就是纯日志）
+        self.on_result = on_result
         self._state_file = Path(state_path_override) if state_path_override else state_path()
 
         # path → ((size, mtime), 首次观察到该签名的时间)
@@ -274,6 +277,13 @@ class FolderWatcher:
                 rec["retry_at"] = time.time() + RETRY_DELAYS[min(attempts - 1, len(RETRY_DELAYS) - 1)]
         self._done[path] = rec
         self.counts[status] = self.counts.get(status, 0) + 1
+
+        # 交给上层攒历史报告（Web 用它写 jobs/*.json，CLI 不看这个）
+        if self.on_result:
+            try:
+                self.on_result(result)
+            except Exception as e:
+                self._log(f"watch 结果回调失败：{P.mask_secret(str(e))}")
 
         self._emit("done", path, result)
         return result

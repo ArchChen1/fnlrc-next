@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -581,6 +583,91 @@ def test_重启后能拿到上次的音乐库路径(client, auth, tmp_path):
     (other / "x.flac").write_bytes(b"")
     client.post("/api/scan", json={"root": str(other), "persist": False})
     assert client.get("/api/config").json()["last_root"] == str(lib)
+
+
+def test_服务启动时按配置自动开始监听(client, auth, tmp_path):
+    """回归：`@app.on_event("startup")` 曾被粘进上一行注释里，重启后自动监听整个失效。
+
+    装饰器在注释里就只是个普通字符串，`_maybe_autostart_watch` 永远不会被调用 ——
+    配置里的 watch_autostart=True 形同虚设，且没有任何报错。
+    """
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_autostart": True,
+                       "watch_poll_s": 0.3, "watch_quiet_s": 0})
+
+    # 新的 TestClient 上下文会重跑一遍 startup 事件
+    with TestClient(server_mod.app) as c:
+        st = c.get("/api/watch/status").json()
+        assert st["running"] is True, "watch_autostart=True 时服务启动就该开始监听"
+        c.post("/api/watch/stop", headers=auth)
+
+
+def test_自动监听处理过的歌会进历史任务(isolated, tmp_path, monkeypatch):
+    """回归：监听处理完就只发一条 SSE，不落任何报告 —— 历史里永远看不到。
+
+    现在每次会话按天攒一份 `watch-*` 报告，跟手动跑的批次长得一样。
+
+    只验证「结果 → 历史报告」这条接线（轮询判定本身由 test_watcher.py 覆盖），
+    直接喂一个结果给 on_result，不依赖文件系统时序。
+    """
+    from fnlrc import watcher as W
+
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_write": False,
+                       "watch_poll_s": 0.2, "watch_quiet_s": 0})
+
+    def fake_process(self, path):
+        return {"file": os.path.basename(path), "title": "T", "artist": "A",
+                "status": "written", "pairs": 3, "note": "", "source": "netease",
+                "backend": "source", "validation": None, "keep_local": False,
+                "expected_lang": "ja", "elapsed_s": 0.1, "trigger": "watch"}
+
+    monkeypatch.setattr(W.FolderWatcher, "_process", fake_process)
+    server_mod._watch_run.reset()
+
+    # 走 _watch_build 造 watcher，这样 on_result 的接线是被测对象
+    w, _stop, _wc = server_mod._watch_build(store.load_config())
+
+    # 直接驱动单文件处理：稳定判定与搬运不在本用例范围内
+    (root / "song1.flac").write_bytes(b"x")
+    w.on_file_ready(str(root / "song1.flac"))
+    assert w.counts, f"watcher 应该处理了这首歌，实际 counts={w.counts}"
+
+    jobs = store.list_reports()
+    assert jobs, "监听处理过的歌必须出现在历史任务里"
+    job = jobs[0]
+    assert job["trigger"] == "watch", "要能区分是自动还是手动跑的"
+    assert job["job_id"].startswith("watch-")
+    assert job["stats"]["written"] == 1
+
+    rep = store.load_report(job["job_id"])
+    assert len(rep["results"]) == 1
+    assert rep["results"][0]["file"] == "song1.flac"
+
+    jobs = store.list_reports()
+    assert jobs, "监听处理过的歌必须出现在历史任务里"
+    job = jobs[0]
+    assert job["trigger"] == "watch", "要能区分是自动还是手动跑的"
+    assert job["job_id"].startswith("watch-")
+    assert job["stats"]["written"] == 1
+
+    rep = store.load_report(job["job_id"])
+    assert len(rep["results"]) == 1
+    assert rep["results"][0]["file"] == "song1.flac"
+
+
+def _wait(cond, timeout=5.0, interval=0.1):
+    """轮询等条件成立（监听是后台线程，没有同步完成信号）。"""
+    import time as _t
+
+    deadline = _t.time() + timeout
+    while _t.time() < deadline:
+        if cond():
+            return True
+        _t.sleep(interval)
+    return False
 
 
 # ---------------------------------------------------------------- 人工翻译接口（M3）

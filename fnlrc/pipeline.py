@@ -455,27 +455,45 @@ def run_batch(songs: list[lib.Song], cfg: Config, on_event=None, should_stop=Non
                      "expected_lang": song.expected_lang, "elapsed_s": 0.0}
         results.append(r)
         stats["done"] = i
-        st = r["status"]
-        if st in ("written", "written_keep_local", "dumped"):
-            stats["written"] += 1
-            if st == "written_keep_local":
-                stats["written_keep_local"] += 1
-        elif st == "written_mono":
-            stats["written_mono"] += 1
-        elif st in ("skipped_existing", "skip"):
-            stats["skipped"] += 1
-        elif st == "skip_instrumental":
-            stats["instrumental"] += 1
-        elif st == "no_lyrics":
-            stats["no_lyrics"] += 1
-        elif st == "timeout":
-            stats["timeout"] += 1
-        elif st == "lang_mismatch":
-            stats["lang_mismatch"] += 1
-        else:
-            stats["failed"] += 1
+        _tally(stats, r["status"])
         emit({"type": "song", "index": i, "total": len(songs), "result": r})
     total_s = round(time.time() - t_start, 1)
     stats["elapsed_s"] = total_s
     emit({"type": "done", "stats": stats, "results": results})
     return {"stats": stats, "results": results, "elapsed_s": total_s}
+
+
+def _tally(stats: dict, st: str) -> None:
+    """把一个 status 计进 stats。监听侧也要按同一口径统计，所以抽出来。"""
+    if st in ("written", "written_keep_local", "dumped"):
+        stats["written"] = stats.get("written", 0) + 1
+        if st == "written_keep_local":
+            stats["written_keep_local"] = stats.get("written_keep_local", 0) + 1
+    elif st == "written_mono":
+        stats["written_mono"] = stats.get("written_mono", 0) + 1
+    elif st in ("skipped_existing", "skip"):
+        stats["skipped"] = stats.get("skipped", 0) + 1
+    elif st == "skip_instrumental":
+        stats["instrumental"] = stats.get("instrumental", 0) + 1
+    elif st == "no_lyrics":
+        stats["no_lyrics"] = stats.get("no_lyrics", 0) + 1
+    elif st == "timeout":
+        stats["timeout"] = stats.get("timeout", 0) + 1
+    elif st == "lang_mismatch":
+        stats["lang_mismatch"] = stats.get("lang_mismatch", 0) + 1
+    else:
+        stats["failed"] = stats.get("failed", 0) + 1
+
+
+def summarize_stats(results: list[dict]) -> dict:
+    """从结果列表算出与 run_batch 同口径的 stats。
+
+    监听是零散收结果的，没有"批量开始/结束"的边界，所以要用它反算同一套数字，
+    好让「历史任务」里手动跑的和监听跑的报告长得一样。
+    """
+    stats = {"total": len(results), "written": 0, "written_keep_local": 0,
+             "written_mono": 0, "skipped": 0, "instrumental": 0, "no_lyrics": 0,
+             "timeout": 0, "lang_mismatch": 0, "failed": 0, "done": len(results)}
+    for r in results:
+        _tally(stats, r.get("status", ""))
+    return stats

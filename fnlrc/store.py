@@ -259,5 +259,7 @@ def list_reports(limit: int = 50) -> list[dict]:
         except Exception:
             continue
         out.append({"job_id": p.stem, "root": d.get("root", ""),
-                    "stats": d.get("stats") or {}, "started_at": d.get("started_at")})
+                    "stats": d.get("stats") or {}, "started_at": d.get("started_at"),
+                    # watch = 监听自动处理攒成的；空 = 手动跑的批次
+                    "trigger": d.get("trigger", "")})
     return out

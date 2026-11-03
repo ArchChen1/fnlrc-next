@@ -312,6 +312,9 @@ const STRINGS = {
   "history.empty": "还没有历史任务",
   "history.view": "查看",
   "history.written": "写 {n}",
+  "history.watch_badge": "自动",
+  "history.manual_badge": "手动",
+  "history.watch_hint": "这条是自动监测处理的（同一天内处理过的歌会累加在一起）",
   "history.failed": "读取历史失败：{err}",
   "history.report_failed": "读取报告失败：{err}",
 

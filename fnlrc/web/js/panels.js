@@ -466,6 +466,9 @@ async function openHistory() {
         <div class="row" style="justify-content:space-between;padding:.7rem 0;border-bottom:1px solid var(--line-soft)">
           <span class="mono" style="max-width:50%;overflow:hidden;text-overflow:ellipsis"
                 title="${esc(j.root)}">${esc(j.root)}</span>
+          ${j.trigger === "watch"
+            ? `<span class="pill" title="${esc(t("history.watch_hint"))}">${esc(t("history.watch_badge"))}</span>`
+            : `<span class="small">${esc(t("history.manual_badge"))}</span>`}
           <span class="small">${esc(fmtTime(j.started_at))}</span>
           <span class="small">${esc(t("history.written", { n: (j.stats || {}).written || 0 }))}</span>
           <button class="btn btn-outline" data-job="${esc(j.job_id)}" type="button">${esc(t("history.view"))}</button>
