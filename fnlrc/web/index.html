@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>fnlrc · 飞牛歌词补完器</title>
+<link rel="stylesheet" href="/styles.css">
+<!--
+  服务端只在来自回环地址的请求里替换下面这个占位符；局域网/容器场景留空串，
+  由令牌闸门接管（见 js/panels.js）。
+  占位符必须与变量名 __FNLRC_TOKEN__ 不同字面量 —— 用同一个字符串会被
+  全局替换连变量名一起换掉，生成 `window.<令牌>="<令牌>"` 这种坏 JS。
+-->
+<script>window.__FNLRC_TOKEN__="%%FNLRC_TOKEN%%";</script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">fnlrc <em>飞牛歌词补完器</em></div>
+  <div class="row">
+    <button class="btn-ghost" id="jumpReport" type="button">报告 ⤓</button>
+    <button class="btn-ghost" id="openSettings" type="button">设置 ⚙</button>
+    <button class="btn-ghost" id="openHistory" type="button">历史</button>
+  </div>
+</div>
+
+<nav class="dots" aria-label="页面导航">
+  <button class="dot" data-i="0" aria-label="选择音乐库"></button>
+  <button class="dot" data-i="1" aria-label="扫描概览"></button>
+  <button class="dot" data-i="2" aria-label="补完预览"></button>
+  <button class="dot" data-i="3" aria-label="执行中"></button>
+  <button class="dot" data-i="4" aria-label="报告"></button>
+</nav>
+
+<main class="track" id="track">
+
+  <!-- ① 选择音乐库 -->
+  <section class="scene" id="scene0">
+    <div class="glow indigo"></div>
+    <div class="stage">
+      <p class="eyebrow rv d0">Step 1 / 5</p>
+      <h1 class="hero rv d75">让每一首歌<br>都有译文</h1>
+      <p class="body rv d150" style="margin-top:1.5rem;max-width:38rem">
+        把「只有原语言、单行显示、刮错、乱码、干脆没歌词」变成
+        <strong style="color:#fff;font-weight:600">原文 + 译文双行</strong>。
+        默认只预览、不写入，确认之后再动手。
+      </p>
+
+      <div class="rv d225" style="margin-top:2.5rem;max-width:38rem">
+        <label class="field">
+          <span>音乐库路径</span>
+          <input type="text" id="root" placeholder="\\NAS\音乐  或  /vol2/1000/音乐"
+                 autocomplete="off" spellcheck="false">
+        </label>
+        <div class="row">
+          <button class="btn btn-secondary" id="browse" type="button">浏览…</button>
+          <button class="btn btn-primary btn-lg" id="doScan" type="button">扫描音乐库</button>
+        </div>
+        <p class="small rv d300" style="margin-top:1rem">
+          支持本地文件夹、SMB 共享、映射盘符；网页版填挂载进容器的路径。
+        </p>
+      </div>
+    </div>
+    <div class="hint"><span>向下滚动</span><i class="chev"></i></div>
+  </section>
+
+  <!-- ② 扫描概览 -->
+  <section class="scene" id="scene1">
+    <div class="glow cyan"></div>
+    <div class="stage">
+      <p class="eyebrow rv d0">Step 2 / 5</p>
+      <h2 class="h1 rv d75" style="margin-top:.6rem">扫描概览</h2>
+
+      <div class="grid g4 rv d150" style="margin-top:2rem" id="stats"></div>
+
+      <div class="scroller rv d225" style="margin-top:1.5rem">
+        <table>
+          <thead><tr><th>目录</th><th>歌曲</th><th>已有双语</th><th>单语</th><th>缺歌词</th><th>乱码</th></tr></thead>
+          <tbody id="bytop"></tbody>
+        </table>
+      </div>
+
+      <div class="row rv d300" style="margin-top:1.5rem">
+        <button class="btn btn-primary" id="doPreview" type="button">查看补完预览</button>
+        <span class="small" id="scanNote"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 补完预览 -->
+  <section class="scene" id="scene2">
+    <div class="glow emerald"></div>
+    <div class="stage">
+      <p class="eyebrow rv d0">Step 3 / 5</p>
+      <h2 class="h1 rv d75" style="margin-top:.6rem">补完预览</h2>
+
+      <div class="grid g2 rv d150" style="margin-top:1.2rem;align-items:start">
+        <div>
+          <label class="row checkline">
+            <input type="checkbox" id="previewMode" checked>
+            <span>预览模式（不写入，只生成到 fnlrc_out/）</span>
+          </label>
+          <label class="row checkline" style="margin-bottom:.9rem">
+            <input type="checkbox" id="forceMode">
+            <span>强制重做已有双语歌词</span>
+          </label>
+          <fieldset style="border:0;padding:0;margin:0">
+            <legend class="eyebrow" style="margin-bottom:.6rem">翻译后端</legend>
+            <div id="backendPick"></div>
+          </fieldset>
+          <p class="note" style="margin-top:.9rem" id="backendHint"></p>
+        </div>
+        <div class="card">
+          <p class="eyebrow" style="color:rgba(255,255,255,.7)">判定分布</p>
+          <div id="dist" style="margin-top:.8rem;font-size:1rem;line-height:1.8"></div>
+        </div>
+      </div>
+
+      <div class="scroller rv d225" style="margin-top:1.2rem">
+        <table>
+          <thead><tr><th>判定</th><th>文件</th><th>原因</th></tr></thead>
+          <tbody id="previewRows"></tbody>
+        </table>
+      </div>
+
+      <div class="row rv d300" style="margin-top:1.2rem">
+        <button class="btn btn-primary btn-lg" id="doRun" type="button">开始补完</button>
+        <span class="small" id="runNote"></span>
+        <span class="small" style="margin-left:auto">还没有写入任何文件</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 执行中 -->
+  <section class="scene" id="scene3">
+    <div class="glow amber"></div>
+    <div class="stage">
+      <p class="eyebrow rv d0">Step 4 / 5</p>
+      <h2 class="h1 rv d75" style="margin-top:.6rem">执行中</h2>
+
+      <div class="row rv d150" style="margin-top:1.5rem;justify-content:space-between">
+        <span class="mono" id="progText">等待开始</span>
+        <span class="mono" id="progPct">0%</span>
+      </div>
+      <div class="bar rv d150" style="margin-top:.7rem"><i id="progBar"></i></div>
+
+      <div class="grid g4 rv d225" style="margin-top:1.5rem" id="liveStats"></div>
+
+      <div class="log rv d300" id="log" style="margin-top:1.5rem">
+        <div class="dim">还没有开始。回到上一屏点「开始补完」。</div>
+      </div>
+
+      <div class="row rv d300" style="margin-top:1.5rem">
+        <button class="btn btn-secondary" id="doStop" type="button" disabled>停止</button>
+        <span class="small">优雅停止：当前这首处理完就停，已写入的保留。</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑤ 报告 -->
+  <section class="scene" id="scene4">
+    <div class="glow rose"></div>
+    <div class="stage">
+      <p class="eyebrow rv d0">Step 5 / 5</p>
+      <h2 class="h1 rv d75" style="margin-top:.6rem" id="reportTitle">报告</h2>
+      <p class="body rv d150" style="margin-top:.8rem" id="reportSummary"></p>
+
+      <div class="row rv d225" style="margin-top:1.5rem" id="filterTabs"></div>
+
+      <div class="scroller rv d300" style="margin-top:1.2rem">
+        <table>
+          <thead><tr><th>状态</th><th>文件</th><th>匹配到</th><th>来源</th><th>并行组</th><th>比例</th></tr></thead>
+          <tbody id="reportRows"></tbody>
+        </table>
+      </div>
+
+      <div class="row rv d300" style="margin-top:1.5rem">
+        <button class="btn btn-outline" id="exportCsv" type="button">导出 CSV</button>
+        <button class="btn btn-outline" id="restart" type="button">再来一次</button>
+        <span class="small" id="flyNote" style="margin-left:auto" title="飞牛把旁挂歌词当作首次解析音频时的一次性输入。已经入库的路径不会再被解析 —— 扫描、改 mtime、重写文件、移出再移回，全部无效（实测）。">
+          ⚠ 飞牛不会重读已入库歌曲的 .lrc —— 新歌请先补完再入库
+        </span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 设置面板（覆盖式，不参与 5 屏叙事） -->
+<div class="overlay" id="settings">
+  <div class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="setTitle">设置</h2>
+      <button class="btn-ghost" data-close="settings" type="button">关闭 ✕</button>
+    </div>
+
+    <div class="hr"></div>
+    <p class="eyebrow">我的 API · DeepSeek</p>
+    <p class="note" id="keyState" style="margin:.8rem 0 1.2rem"></p>
+    <label class="field"><span>API Key</span>
+      <input type="password" id="cfgKey" placeholder="sk-…" autocomplete="off"></label>
+    <div class="grid g2">
+      <label class="field"><span>Base URL</span>
+        <input type="text" id="cfgBase" placeholder="https://api.deepseek.com"></label>
+      <label class="field"><span>模型名</span>
+        <input type="text" id="cfgModel" placeholder="deepseek-flash"></label>
+    </div>
+    <div class="row">
+      <button class="btn btn-outline" id="testRemote" type="button">测试连接</button>
+      <span class="small" id="testResult"></span>
+    </div>
+    <p class="note" style="margin-top:1rem">
+      Key 只存在服务端，浏览器拿不到回显。网页版提交需要访问令牌。
+      翻译只会用到<strong style="color:#fff">源站没给译文的那些行</strong>，并把歌词文本发给 DeepSeek；
+      选「源站译词」则完全不出网。
+      <br><br>
+      Base URL 填 <span class="mono">https://api.deepseek.com</span>（<b>不要加 <span class="mono">/v1</span></b>），
+      模型名只有 <span class="mono">deepseek-flash</span> 与 <span class="mono">deepseek-v4-pro</span> 两个。
+      模型名这类东西会变，以 <span class="mono">api-docs.deepseek.com</span> 为准。
+    </p>
+
+    <div class="hr"></div>
+    <p class="eyebrow">音乐库</p>
+    <div class="row" style="margin-top:1rem">
+      <button class="btn btn-outline" id="testWrite" type="button">测试写入权限</button>
+      <button class="btn btn-outline" id="rotateToken" type="button">重置访问令牌</button>
+      <span class="small" id="writeResult"></span>
+    </div>
+    <p class="note" style="margin-top:1rem">
+      SMB 共享、只读挂载、容器权限都可能让你「能读不能写」。
+      先测一次，别等跑了半小时才失败。
+      <br>
+      它会建一个 <span class="mono">fnlrc_write_test.tmp</span> 再删掉。
+      <b>库内不留东西</b>；但在飞牛上删除会进回收站，那里会多一条同名记录，属正常。
+    </p>
+
+    <div class="hr"></div>
+    <p class="eyebrow">其它</p>
+    <label class="row checkline" style="margin-top:1rem">
+      <input type="checkbox" id="cfgBackup">
+      <span>替换旧歌词前备份 <span class="mono">.lrc.bak</span></span>
+    </label>
+    <label class="row checkline" style="margin-top:.6rem">
+      <input type="checkbox" id="cfgKeepLocal" checked>
+      <span>外文单语歌词：保留本地时间轴，只把译文插进去</span>
+    </label>
+    <p class="note" style="margin-top:.6rem">
+      勾上时，如果你那首歌已经有单语的 <span class="mono">.lrc</span>，工具会<b>沿用你文件里的
+      时间轴和断句</b>，只按相同时间戳补译文行 —— 手工精修过时间轴的歌不会被整份换掉。
+      对齐结果过不了飞牛双行规则时会自动退回「重抓」。
+      取消勾选则一律按源站整份重写。
+    </p>
+    <div class="row" style="margin-top:1.5rem">
+      <button class="btn btn-primary" id="saveSettings" type="button">保存</button>
+    </div>
+
+    <div class="hr"></div>
+    <p class="eyebrow">回填到飞牛（进阶）</p>
+    <p class="note" style="margin:.8rem 0 1rem">
+      飞牛只在歌曲<b>第一次入库</b>时读一次同目录的 <span class="mono">.lrc</span>，已经入库的歌
+      再怎么写文件都不生效。这个功能直接把歌词写进飞牛的数据库，绕过那个限制
+      —— 只改歌词正文、保留 <span class="mono">lyric_id</span>，所以<b>歌单、收藏、播放历史都不受影响</b>。
+      <br><br>
+      它写的是<b>另一个应用的私有数据库</b>。服务端要显式开启（<span class="mono">-e FNLRC_ENABLE_FNOS_WRITE=1</span>）
+      才能用，并且每次都会先备份。动手前建议自己再备份一次
+      <span class="mono">music.db</span> 和 <span class="mono">lyric-sqlite/</span>。
+    </p>
+    <p class="note" style="margin:.8rem 0 1rem">
+      它的数据在<b>两个</b>地方、而且分属<b>两张表</b> —— 主库的
+      <span class="mono">@appdata</span> 里是歌词<b>索引</b>（<span class="mono">lyric</span> 表，
+      没有正文），正文在存储池 <span class="mono">@appmeta</span> 的分片里
+      （<span class="mono">lyric_content</span> 表）。
+      <b>两处都要挂进容器</b>，只挂一处会找不到另一半。
+    </p>
+    <div class="grid g2">
+      <label class="field"><span>主库目录（music.db 所在）</span>
+        <input type="text" id="fnosAppData" placeholder="/fnos-data/appdata" autocomplete="off"></label>
+      <label class="field"><span>歌词分片目录（lyric-sqlite 所在）</span>
+        <input type="text" id="fnosAppmeta" placeholder="/fnos-data/appmeta" autocomplete="off"></label>
+    </div>
+    <label class="row checkline" style="margin:.4rem 0 .8rem">
+      <input type="checkbox" id="fnosAllowInsert">
+      <span>给<b>没有歌词</b>的歌新建歌词行</span>
+    </label>
+    <p class="note" style="margin:0 0 1rem">
+      勾上之后，「库里一行歌词都没有」的歌也会被填上（真机实测应用能立刻认）。
+      不勾则只改已有歌词的正文。
+      <br>
+      <b>已有歌词的歌永远不会被新建</b>：偏好表以 <span class="mono">lyric_id</span> 为键，
+      插一条新行而不动偏好，应用仍然显示旧那版 —— 你会以为没生效。
+    </p>
+    <div class="row">
+      <button class="btn btn-outline" id="fnosProbe" type="button">① 检测结构</button>
+      <button class="btn btn-outline" id="fnosPreview" type="button">② 预览差异</button>
+      <button class="btn btn-secondary" id="fnosApply" type="button" disabled>③ 执行回填</button>
+    </div>
+    <p class="note" id="fnosStatus" style="margin-top:.9rem"></p>
+    <pre class="prebox" id="fnosOut"></pre>
+  </div>
+</div>
+
+<!-- 目录浏览（网页版选目录；桌面版走原生对话框） -->
+<div class="overlay" id="fsbrowser">
+  <div class="sheet" id="fsSheet" role="dialog" aria-modal="true" aria-label="选择目录"></div>
+</div>
+
+<!-- 历史任务 -->
+<div class="overlay" id="history">
+  <div class="sheet" id="historySheet" role="dialog" aria-modal="true" aria-label="历史任务"></div>
+</div>
+
+<!-- 令牌闸门：局域网/容器打开时要求填入访问令牌 -->
+<div class="overlay" id="gate">
+  <div class="sheet" style="max-width:28rem">
+    <h2>需要访问令牌</h2>
+    <p class="note" style="margin:1rem 0 1.5rem">
+      这个服务不是从本机打开的，所以不会自动带上令牌。<br>
+      在服务器上执行下面这条命令拿到它：
+      <br><br><span class="mono" style="color:#fff">docker logs fnlrc 2&gt;&amp;1 | grep -i token</span>
+      <br>或 <span class="mono" style="color:#fff">fnlrc token</span>
+    </p>
+    <label class="field"><span>访问令牌</span>
+      <input type="password" id="gateToken" autocomplete="off"></label>
+    <div class="row">
+      <button class="btn btn-primary" id="gateSubmit" type="button">进入</button>
+      <span class="small" id="gateMsg"></span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

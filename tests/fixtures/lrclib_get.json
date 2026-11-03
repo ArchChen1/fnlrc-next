@@ -1,0 +1,12 @@
+{
+  "_comment": "合成样本：结构与 LRCLIB /api/get 命中响应一致。",
+  "_why": "见 netease_search.json 的说明 —— 不提交真实录制响应。",
+  "id": 900001,
+  "trackName": "Sample Song",
+  "artistName": "Original Artist",
+  "albumName": "Sample Album",
+  "duration": 246,
+  "instrumental": false,
+  "plainLyrics": "line one\nline two\n",
+  "syncedLyrics": "[00:02.00]line one\n[00:06.00]line two\n[00:10.00]line three\n[00:14.00]line four\n[00:18.00]line five\n[00:22.00]line six\n"
+}

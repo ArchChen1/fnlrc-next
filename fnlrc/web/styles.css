@@ -1,0 +1,244 @@
+/* ==========================================================================
+   fnlrc · 样式
+   设计风格：full-page-scroll（StyleKit）
+     · 每一屏占满视口、scroll-snap 强制吸附、一屏一事
+     · 纯黑底 + 白字 + 白/透明描边 + rounded-full + 渐变卡片
+     · 层次一律靠色块与渐变，全站不用任何盒阴影
+     · 内容层错落（d0 / d75 / d150），背景 hover 时放大
+
+   禁用项由 CI 门禁把关（见 docs/UI-SPEC.md 第五章的 grep 命令），
+   用 Tailwind 的说法就是：不用任何盒阴影、不用灰色描边、不用深灰文字。
+   **本文件刻意不写出那些类名的字面量**，这样那条 grep 才能真的当门禁用 ——
+   写进注释里会让它永远命中自己。
+
+   不用 Tailwind CDN：桌面版要能离线跑。下面把它的 token 用原生 CSS 等价实现，
+   变量名与 skill 的类名一一对应，改主题只动 :root。
+   ========================================================================== */
+
+:root{
+  --bg-primary:#000;                    /* bg-black */
+  --bg-secondary:#18181b;               /* bg-zinc-900 */
+  --text:#fff;                          /* text-white */
+  --text-muted:rgba(255,255,255,.5);    /* text-white/50 */
+  --line:rgba(255,255,255,.2);          /* border-white/20 */
+  --line-soft:rgba(255,255,255,.1);
+  --grad-indigo:linear-gradient(135deg,#4f46e5,#7e22ce);  /* from-indigo-600 to-purple-700 */
+  --grad-cyan:linear-gradient(135deg,#0891b2,#2563eb);    /* from-cyan-600 to-blue-600 */
+  --grad-emerald:linear-gradient(135deg,#059669,#0d9488);
+  --grad-amber:linear-gradient(135deg,#d97706,#ea580c);
+  --grad-rose:linear-gradient(135deg,#e11d48,#db2777);
+  --ok:#6ee7b7; --warn:#fcd34d; --bad:#fca5a5;
+  --radius-full:9999px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",
+         "Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg-primary);color:var(--text);
+     font-family:var(--sans);-webkit-font-smoothing:antialiased}
+
+/* ── 场景轨：唯一的滚动容器，强制整屏吸附 ───────────────────────── */
+.track{height:100dvh;overflow-y:auto;overflow-x:hidden;
+       scroll-snap-type:y mandatory;scroll-behavior:smooth}
+/*
+  每一屏都**恰好**一个视口高 —— 这是吸附几何的前提：只有各屏等高，
+  「第 i 屏的位移 = i × 视口高」才成立，导航点与键盘跳转才不会跳错。
+  实测踩过：用 min-height 时内容多的一屏会长到 820px（视口 635px），
+  后续所有屏的位移全部错位。
+
+  height:100dvh + overflow:hidden 之后，内容真的塞不下时由 .stage 内部滚动兜底，
+  宁可让一屏内部可滚，也不要让整条轨的几何被撑坏。内容尺寸仍需控制在单屏内。
+*/
+.scene{position:relative;height:100dvh;min-height:100dvh;scroll-snap-align:start;
+       display:flex;align-items:center;justify-content:center;
+       padding:4.5rem 1.5rem 2.5rem;overflow:hidden}
+@media(min-width:768px){.scene{padding:4.5rem 2rem 2.5rem}}
+@media(min-width:1024px){.scene{padding:4.5rem 3rem 2.5rem}}
+
+/* 背景径向渐变：hover 时 scale-110（"呼吸感"） */
+.glow{position:absolute;inset:-20%;z-index:0;pointer-events:none;opacity:.5;
+      transition:transform .7s var(--ease)}
+.scene:hover .glow{transform:scale(1.1)}
+.glow.indigo{background:radial-gradient(60% 50% at 50% 40%,rgba(79,70,229,.45),transparent 70%)}
+.glow.cyan{background:radial-gradient(60% 50% at 50% 40%,rgba(8,145,178,.4),transparent 70%)}
+.glow.emerald{background:radial-gradient(60% 50% at 50% 40%,rgba(5,150,105,.4),transparent 70%)}
+.glow.amber{background:radial-gradient(60% 50% at 50% 40%,rgba(217,119,6,.35),transparent 70%)}
+.glow.rose{background:radial-gradient(60% 50% at 50% 40%,rgba(225,29,72,.35),transparent 70%)}
+
+/*
+  内容层做成纵向 flex：**可伸缩的那一块（表格 / 日志）吸收剩余空间**，
+  其余按自然高度排列。这样无论内容多少，一屏都恰好等于视口 ——
+  比逐块抠像素稳，也不会因为多了一行提示就把整条轨的几何撑坏。
+  极端情况（固定部分就已超屏）由 stage 自身的滚动兜底。
+*/
+.stage{position:relative;z-index:1;width:100%;max-width:64rem;margin:0 auto;
+       max-height:100%;display:flex;flex-direction:column;overflow-y:auto;
+       overscroll-behavior:contain}
+.stage > .scroller,.stage > .log{flex:1 1 auto;min-height:3.5rem;max-height:none}
+
+/* 内容层错落（skill：不能所有元素同 delay，否则没有景深） */
+.rv{animation:rise .7s var(--ease) both}
+.d0{animation-delay:0ms}.d75{animation-delay:75ms}.d150{animation-delay:150ms}
+.d225{animation-delay:225ms}.d300{animation-delay:300ms}
+@keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+
+/* ── 排版 ───────────────────────────────────────────────────── */
+.hero{font-size:clamp(2.75rem,7vw,6rem);font-weight:700;letter-spacing:-.025em;
+      line-height:1.02;margin:0}
+.h1{font-size:clamp(1.75rem,4.2vw,3.5rem);font-weight:700;letter-spacing:-.02em;margin:0}
+.body{font-size:clamp(1rem,1.6vw,1.35rem);line-height:1.65;color:rgba(255,255,255,.82);margin:0}
+.small{font-size:.8125rem;color:var(--text-muted)}
+.eyebrow{font-size:.75rem;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
+         color:rgba(255,255,255,.45)}
+.mono{font-family:var(--mono);font-size:.8125rem}
+
+/* ── 组件 ───────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+     font:inherit;font-weight:600;font-size:.9375rem;cursor:pointer;
+     padding:.8rem 1.6rem;border-radius:var(--radius-full);border:0;
+     transition:background-color .2s,color .2s,border-color .2s,opacity .2s}
+.btn-primary{background:#fff;color:#000}
+.btn-primary:hover{background:rgba(255,255,255,.9)}
+.btn-secondary{background:transparent;color:#fff;border:2px solid #fff}
+.btn-secondary:hover{background:rgba(255,255,255,.12)}
+.btn-outline{background:transparent;color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.3)}
+.btn-outline:hover{border-color:#fff;color:#fff}
+.btn-lg{padding:1.05rem 2.4rem;font-size:1.0625rem}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-ghost{background:transparent;border:0;color:rgba(255,255,255,.6);cursor:pointer;
+           font:inherit;font-size:.875rem;padding:.35rem .6rem;border-radius:var(--radius-full)}
+.btn-ghost:hover{color:#fff;background:rgba(255,255,255,.1)}
+
+input[type=text],input[type=password],select{
+  width:100%;background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.3);
+  color:#fff;font:inherit;font-size:.9375rem;padding:.6rem .1rem;transition:border-color .2s}
+input::placeholder{color:rgba(255,255,255,.5)}
+input:focus,select:focus{outline:none;border-bottom-color:#fff}
+select option{background:var(--bg-secondary);color:#fff}
+input:disabled{opacity:.5;cursor:not-allowed}
+input[type=checkbox],input[type=radio]{accent-color:#fff;width:1rem;height:1rem;flex:none}
+
+label.field{display:block;margin-bottom:1.15rem}
+label.field>span{display:block;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;
+                 color:rgba(255,255,255,.45);margin-bottom:.35rem}
+label.checkline{gap:.55rem;margin-bottom:.9rem;font-size:.9375rem;cursor:pointer}
+
+.row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+.grid{display:grid;gap:1rem}
+@media(min-width:640px){
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+}
+
+/* 卡片 / 统计块：用色块与渐变造层次，全站零阴影 */
+.card{background:var(--grad-indigo);border:0;border-radius:1.25rem;padding:2rem}
+@media(min-width:768px){.card{padding:3rem}}
+.stat{border:1px solid var(--line);border-radius:1.25rem;padding:1.25rem;text-align:center;
+      transition:background-color .3s,border-color .3s}
+.stat:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.4)}
+.stat .n{font-size:clamp(1.6rem,3.4vw,2.4rem);font-weight:700;line-height:1.1}
+.stat .k{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;
+         color:rgba(255,255,255,.5);margin-top:.35rem}
+
+.pill{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--line);
+      border-radius:var(--radius-full);padding:.32rem .85rem;font-size:.8125rem;
+      transition:border-color .2s,background-color .2s;white-space:nowrap}
+.pill.ok{border-color:rgba(52,211,153,.55);color:var(--ok)}
+.pill.warn{border-color:rgba(251,191,36,.55);color:var(--warn)}
+.pill.bad{border-color:rgba(248,113,113,.55);color:var(--bad)}
+.pill.dim{color:rgba(255,255,255,.55)}
+.pill:hover{border-color:#fff}
+
+/* 表格：section 本身不溢出，长内容在内部滚动容器里 */
+.scroller{max-height:32vh;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
+          overscroll-behavior:contain}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{position:sticky;top:0;z-index:2;background:#000;text-align:left;font-weight:600;
+   font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;
+   color:rgba(255,255,255,.5);padding:.85rem 1rem;border-bottom:1px solid var(--line);
+   white-space:nowrap}
+td{padding:.7rem 1rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:rgba(255,255,255,.05)}
+td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 窄屏：表格转卡片列表 */
+@media(max-width:640px){
+  table,thead,tbody,tr,td{display:block}
+  thead{display:none}
+  tr{border:1px solid var(--line);border-radius:1rem;margin-bottom:.75rem;padding:.5rem}
+  td{border:0;padding:.3rem .6rem}
+  td.path{max-width:none;white-space:normal}
+}
+
+.bar{height:4px;background:rgba(255,255,255,.15);border-radius:var(--radius-full);overflow:hidden}
+.bar>i{display:block;height:100%;background:#fff;width:0;transition:width .45s var(--ease)}
+
+.log{max-height:30vh;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
+     padding:1rem 1.15rem;font-family:var(--mono);font-size:.8125rem;line-height:1.75;
+     overscroll-behavior:contain}
+.log div{white-space:pre-wrap;word-break:break-word}
+.log .ok{color:var(--ok)}.log .warn{color:var(--warn)}
+.log .bad{color:var(--bad)}.log .dim{color:rgba(255,255,255,.45)}
+
+/* ── 顶栏 / 导航点 / 滚动提示 ───────────────────────────────── */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
+        justify-content:space-between;gap:1rem;padding:1.1rem 1.5rem;
+        background:linear-gradient(to bottom,rgba(0,0,0,.92),transparent)}
+@media(min-width:768px){.topbar{padding:1.25rem 3rem}}
+.brand{font-weight:700;letter-spacing:-.01em;font-size:1rem}
+.brand em{font-style:normal;color:rgba(255,255,255,.45);font-weight:400;
+          margin-left:.6rem;font-size:.8125rem}
+
+/* hover 时从圆变胶囊（skill 明确要求 hover:h-6） */
+.dots{position:fixed;right:1.5rem;top:50%;transform:translateY(-50%);z-index:40;
+      display:flex;flex-direction:column;gap:.7rem;align-items:center}
+.dot{width:9px;height:9px;border-radius:var(--radius-full);background:rgba(255,255,255,.3);
+     border:0;padding:0;cursor:pointer;transition:all .3s var(--ease)}
+.dot:hover{height:1.5rem;background:#fff}
+.dot[aria-current="true"]{background:#fff;height:1.5rem}
+.dot:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+.hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:1;
+      display:flex;flex-direction:column;align-items:center;gap:.5rem;
+      color:rgba(255,255,255,.5);font-size:.75rem;letter-spacing:.16em;text-transform:uppercase}
+.chev{width:11px;height:11px;border-right:2px solid rgba(255,255,255,.6);
+      border-bottom:2px solid rgba(255,255,255,.6);transform:rotate(45deg);
+      animation:bob 1.8s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:rotate(45deg) translate(0,0);opacity:.45}
+               50%{transform:rotate(45deg) translate(4px,4px);opacity:1}}
+
+/* ── 覆盖式面板（设置 / 历史 / 令牌闸门）────────────────────── */
+.overlay{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+         background:rgba(0,0,0,.85);backdrop-filter:blur(6px);padding:1.5rem}
+.overlay.open{display:flex}
+.sheet{width:100%;max-width:44rem;max-height:86dvh;overflow-y:auto;
+       border:1px solid var(--line);border-radius:1.5rem;padding:2rem;
+       background:rgba(9,9,11,.96)}
+@media(min-width:768px){.sheet{padding:2.5rem}}
+.sheet h2{margin:0 0 .35rem;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+.hr{height:1px;background:var(--line-soft);margin:1.5rem 0}
+.note{border-left:2px solid var(--line);padding-left:.9rem;font-size:.8125rem;
+      color:rgba(255,255,255,.6);line-height:1.7}
+.empty{padding:2.5rem 1rem;text-align:center;color:rgba(255,255,255,.45);font-size:.875rem}
+
+.toast{position:fixed;left:50%;bottom:2rem;transform:translate(-50%,150%);z-index:80;
+       background:#fff;color:#000;font-size:.875rem;font-weight:600;
+       padding:.75rem 1.4rem;border-radius:var(--radius-full);
+       transition:transform .35s var(--ease);max-width:min(90vw,34rem)}
+.toast.show{transform:translate(-50%,0)}
+
+/* 动态插入的目录列表行 */
+.diritem{width:100%;justify-content:flex-start;margin-bottom:.4rem}
+.dirlist{max-height:44vh;overflow-y:auto}
+
+/* 设置面板里的等宽输出框（回填功能会把探测/差异报告打在这里） */
+.prebox{margin:1rem 0 0;padding:1rem 1.15rem;border:1px solid var(--line);border-radius:1rem;
+        background:rgba(255,255,255,.03);font-family:var(--mono);font-size:.75rem;
+        line-height:1.7;white-space:pre-wrap;word-break:break-word;
+        max-height:22vh;overflow-y:auto;color:rgba(255,255,255,.8)}
+.prebox:empty{display:none}

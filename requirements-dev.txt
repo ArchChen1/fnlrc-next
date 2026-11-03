@@ -1,0 +1,13 @@
+# 开发与测试依赖（普通使用不需要装这些）
+#
+#   pip install -r requirements-dev.txt
+#   pytest -q
+
+-r requirements.txt
+
+pytest>=8.0,<9
+
+# 新版 starlette 的 TestClient 依赖它（旧版用的是 httpx）。缺了的话 `pytest`
+# 会在**导入阶段**就失败，而不是某个用例红 —— 在 NAS 上验证时真踩到过。
+# 本地旧版 starlette 只会打一条 deprecation 警告，所以容易漏掉。
+httpx2>=0.1

@@ -1,0 +1,50 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# ---- 打包 / 工具 ----
+*.spec.bak
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 运行时产物（不要提交） ----
+fnlrc_out/
+_debug_out/
+*.log
+logs/
+manifest.json
+report.json
+*.lrc.bak
+jobs.db
+
+# ---- 草稿 ----
+plan/
+
+# ---- 凭据（绝不提交） ----
+config.json
+.env
+*.env
+.env.*
+credentials.json
+*.key
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Claude Code 本地设置（launch.json 是有用的，留着提交）----
+.claude/settings.local.json

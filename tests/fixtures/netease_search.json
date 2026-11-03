@@ -1,0 +1,51 @@
+{
+  "_comment": "合成样本：结构与网易云 /api/search/get 一致，文本全部是占位内容。",
+  "_why": "不提交真实录制响应 —— 那等于把第三方歌词数据分发进仓库，与 docs/FAQ.md 的合规声明冲突。契约测试要断言的是排序/淘汰/降级这类关系，不需要真实歌词。",
+  "result": {
+    "songs": [
+      {
+        "id": 1001,
+        "name": "Sample Song",
+        "duration": 246000,
+        "artists": [{"name": "Original Artist"}]
+      },
+      {
+        "id": 1002,
+        "name": "Sample Song (Live)",
+        "duration": 246500,
+        "artists": [{"name": "Original Artist"}]
+      },
+      {
+        "id": 1003,
+        "name": "Sample Song",
+        "duration": 246000,
+        "artists": [{"name": "Cover Singer"}]
+      },
+      {
+        "id": 1004,
+        "name": "Sample Song (Instrumental)",
+        "duration": 246000,
+        "artists": [{"name": "Original Artist"}]
+      },
+      {
+        "id": 1005,
+        "name": "Sample Song（翻自 Original Artist）",
+        "duration": 247000,
+        "artists": [{"name": "Another Cover"}]
+      },
+      {
+        "id": 1006,
+        "name": "Sample Song",
+        "duration": 310000,
+        "artists": [{"name": "Original Artist"}]
+      },
+      {
+        "id": 1007,
+        "name": "Totally Different Track",
+        "duration": 246000,
+        "artists": [{"name": "Someone Else"}]
+      }
+    ]
+  },
+  "code": 200
+}

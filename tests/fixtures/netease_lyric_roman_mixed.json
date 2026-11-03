@@ -1,0 +1,10 @@
+{
+  "_comment": "合成样本：结构与网易云 /api/song/lyric 一致 —— lrc 字段里原文与罗马音交替混排。",
+  "_why": "用于验证 split_orig_roles 能认出这种上传形态。",
+  "lrc": {
+    "lyric": "[00:02.00]ああ サンプル\n[00:03.00]aa sanpuru\n[00:06.00]いいえ サンプル\n[00:07.00]iie sanpuru\n[00:10.00]これは テスト\n[00:11.00]kore wa tesuto\n"
+  },
+  "tlyric": {"lyric": ""},
+  "romalrc": {"lyric": ""},
+  "code": 200
+}

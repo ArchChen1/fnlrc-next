@@ -1,0 +1,37 @@
+# 飞牛 NAS 部署示例（把 /vol2/1000/音乐 换成你机器上的真实路径）
+#
+#   docker compose up -d
+#   docker compose logs fnlrc | grep -i token     # 拿到访问令牌
+#
+# API key 放在同目录的 fnlrc.env 里（已在 .gitignore 中忽略）：
+#   FNLRC_REMOTE_API_KEY=sk-xxxx
+
+services:
+  fnlrc:
+    build: .
+    # 如果用现成镜像，就把上面这行换成 image: ghcr.io/<你的用户名>/fnlrc:latest
+    container_name: fnlrc
+    ports:
+      # 默认只监听回环。要让局域网访问改成 "8080:8080"，
+      # 那就**必须**靠访问令牌保护（启动日志里会给）
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /vol2/1000/音乐:/music          # 音乐库（飞牛里能看到的那个路径）
+      - fnlrc-data:/data                # 任务历史 / 配置 / 令牌
+      # ── 下面两个只在你要用「回填到飞牛」时才需要 ──
+      # 飞牛的数据在**两处、两个文件系统**上，只挂一处探测会报「没找到」。
+      # 主库在系统盘，歌词正文在存储池：
+      # - /usr/local/apps/@appdata/trim.music:/fnos-data/appdata
+      # - /vol2/@appmeta/trim.music:/fnos-data/appmeta
+    environment:
+      - TZ=Asia/Shanghai
+      - FNLRC_DATA=/data
+      # 「回填到飞牛」默认关着 —— 它会写另一个应用的数据库。
+      # 要用就打开下面这行，并同时打开上面那两个挂载：
+      # - FNLRC_ENABLE_FNOS_WRITE=1
+    env_file:
+      - fnlrc.env                        # 放 FNLRC_REMOTE_API_KEY
+    restart: unless-stopped
+
+volumes:
+  fnlrc-data:
