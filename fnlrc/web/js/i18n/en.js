@@ -55,10 +55,11 @@ const STRINGS = {
   "dash.todo_no_lyrics": "No lyrics found",
   "dash.todo_hint": "{n} songs — click to open",
   "dash.todo_clear": "Nothing to deal with in the latest run",
-  "dash.todo_none_yet": "No run yet",
+  "dash.todo_watching_clear": "Watching — nothing needs you right now. New songs are handled automatically.",
+  "dash.todo_none_yet": "No run yet. Start with “Watch a folder” or “Run now” above.",
   "dash.recent_title": "Recent runs",
   "dash.recent_all": "All history",
-  "dash.recent_empty": "No runs yet",
+  "dash.recent_empty": "No runs yet. After your first run this lists the latest few and what they did.",
   "dash.recent_written": "{n} written",
   "dash.recent_failed": "{n} failed",
 
@@ -69,6 +70,9 @@ const STRINGS = {
   "auto.saving": "Starting…",
   "auto.started": "Watching — new songs will be finished automatically",
   "auto.start_failed": "Could not start watching: {err}",
+  "auto.need_watch_root": "Fill in the folder to watch first — it is not the same as the library path",
+  "auto.watch_title": "Folder to watch",
+  "auto.watch_note": "New songs landing in this folder get finished automatically. It is not the library path: the library says what to fix, this says where to wait for new songs. Preview only by default — tick “write directly” to actually change your files.",
 
   // ── status (same names as backend) ────────────────────
   "status.written": "✓ Bilingual",

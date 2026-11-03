@@ -119,11 +119,21 @@ function renderTodo(stats, latestJob) {
       </button>`;
   }).join("");
 
+  // 「没有数字」有两种截然不同的情况，说成一句话会让人以为坏了：
+  //   从没跑过     → 引导他去做第一件事
+  //   跑过且干净   → 告诉他结果是好的
+  //   监听中但还没处理过歌 → 说明它在等，不是没干活
   const total = stats ? cells.reduce((a, [k]) => a + (stats[k] || 0), 0) : 0;
   if (hint) {
-    hint.textContent = !stats ? t("dash.todo_none_yet")
-      : total ? t("dash.todo_hint", { n: total })
-      : t("dash.todo_clear");
+    if (!stats) {
+      hint.textContent = t("dash.todo_none_yet");
+    } else if (total) {
+      hint.textContent = t("dash.todo_hint", { n: total });
+    } else if (S.watchRunning) {
+      hint.textContent = t("dash.todo_watching_clear");
+    } else {
+      hint.textContent = t("dash.todo_clear");
+    }
   }
 
   $$("#dashTodo [data-todo]").forEach(b => b.addEventListener("click", async () => {

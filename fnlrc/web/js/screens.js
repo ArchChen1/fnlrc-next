@@ -117,9 +117,36 @@ export function applyMode() {
   }
   if (note) note.hidden = auto;   // 自动模式不写库，这句没意义
 
+  // 监听目录只对自动监测有意义 —— 立即执行本来就不监听
+  const autoBox = $("#autoWatch");
+  if (autoBox) autoBox.hidden = !auto;
+  if (auto) fillAutoWatch();
+
   // 自动模式没有「进度 / 报告」Tab，别停在那两个上面
   if (auto && S.tab >= AUTO_TABS) go(0);
   syncTabLocks();
+}
+
+/** 把服务端已存的监听配置回填到自动监测那一段（进入流程时读一次）。 */
+function fillAutoWatch() {
+  const w = (S.config && S.config.watch) || {};
+  const set = (id, v) => { const el = $(id); if (el) el.value = v == null ? "" : v; };
+  set("#autoWatchRoot", w.watch_root || "");
+  set("#autoWatchMoveTo", w.watch_move_to || "");
+  const after = $("#autoWatchAfter");
+  if (after) after.value = w.watch_after || "keep";
+  const wr = $("#autoWatchWrite");
+  if (wr) wr.checked = w.watch_write !== false;
+}
+
+/** 读回自动监测那一段的表单值 */
+export function autoWatchPatch() {
+  return {
+    watch_root: ($("#autoWatchRoot")?.value || "").trim(),
+    watch_after: $("#autoWatchAfter")?.value || "keep",
+    watch_move_to: ($("#autoWatchMoveTo")?.value || "").trim(),
+    watch_write: !!$("#autoWatchWrite")?.checked
+  };
 }
 
 /**
@@ -319,7 +346,6 @@ function moveBy(btn, delta) {
   S.translateOrder = order;
   renderBackends();
 }
-
 /** dragstart 记下来源，dragover 时实时挪位（比只换 class 更直观） */
 function bindDrag(box) {
   let dragged = null;
@@ -349,16 +375,88 @@ function bindDrag(box) {
       if (!dragged || dragged === li) return;
       const rows = $$(".chainRow", box);
       const from = rows.indexOf(dragged), to = rows.indexOf(li);
-      if (from < 0 || to < 0) return;
-      const nodes = rows.slice();
-      nodes.splice(to, 0, nodes.splice(from, 1)[0]);
-      // 直接把 DOM 顺序定下来，再回读成数据 —— 避免状态与画面不同步
-      const list = $("#chainList");
-      nodes.forEach(n => list.appendChild(n));
-      S.translateOrder = enabledOrder();
-      renderBackends();
+      moveRow(from, to);
+      dragged = null;
     });
   });
+  bindTouchDrag(box);
+}
+
+/** 把第 from 行挪到第 to 行，再重画。桌面与触屏共用这一条路径。 */
+function moveRow(from, to) {
+  const rows = $$("#chainList .chainRow");
+  if (from < 0 || to < 0 || from >= rows.length || to >= rows.length || from === to) return;
+  const nodes = rows.slice();
+  nodes.splice(to, 0, nodes.splice(from, 1)[0]);
+  const list = $("#chainList");
+  if (list) nodes.forEach(n => list.appendChild(n));
+  S.translateOrder = enabledOrder();
+  renderBackends();
+}
+
+/**
+ * 触屏拖拽（M6.1）。
+ *
+ * 手机浏览器基本不支持 HTML5 drag & drop —— 手指按住不会触发 dragstart。
+ * 所以这里用 Pointer Events 自己实现：按住握把移动，经过哪一行就把它挪到那儿。
+ * 只绑在握把上，这样点复选框、点上下按钮都不会误触发排序。
+ */
+function bindTouchDrag(box) {
+  $$(".chainGrip", box).forEach(grip => {
+    grip.style.touchAction = "none";     // 阻止浏览器把滑动当成滚页面
+
+    grip.addEventListener("pointerdown", e => {
+      if (e.pointerType === "mouse") return;   // 桌面走原生拖拽，别双份
+      const row = grip.closest(".chainRow");
+      if (!row) return;
+      e.preventDefault();
+      grip.setPointerCapture?.(e.pointerId);
+
+      row.classList.add("dragging");
+      let lastTo = $$("#chainList .chainRow").indexOf(row);
+
+      const cleanup = () => {
+        row.classList.remove("dragging");
+        $$("#chainList .chainRow").forEach(x => x.classList.remove("over"));
+        S.translateOrder = enabledOrder();
+        updateChainHint();
+        grip.removeEventListener("pointermove", onMove);
+        grip.removeEventListener("pointerup", cleanup);
+        grip.removeEventListener("pointercancel", cleanup);
+      };
+
+      const onMove = ev => {
+        const rows = $$("#chainList .chainRow");
+        // 找出手指当前落在哪一行
+        let hit = -1;
+        rows.forEach((r, i) => {
+          const b = r.getBoundingClientRect();
+          if (ev.clientY >= b.top && ev.clientY <= b.bottom) hit = i;
+        });
+        if (hit < 0 || hit === lastTo) return;
+        const cur = rows.indexOf(row);
+        if (cur < 0) return;
+        moveRowLive(cur, hit);
+        lastTo = hit;
+      };
+
+      grip.addEventListener("pointermove", onMove);
+      grip.addEventListener("pointerup", cleanup);
+      grip.addEventListener("pointercancel", cleanup);
+    });
+  });
+}
+
+/** 触屏过程中只挪 DOM（不整块重画），否则手指还按着就丢了捕获。 */
+function moveRowLive(from, to) {
+  const rows = $$("#chainList .chainRow");
+  if (from < 0 || to < 0 || from >= rows.length || to >= rows.length || from === to) return;
+  const node = rows[from];
+  const target = rows[to];
+  const list = $("#chainList");
+  if (!node || !target || !list) return;
+  list.removeChild(node);
+  if (from < to) target.after(node); else target.before(node);
 }
 
 function updateChainHint() {
@@ -462,14 +560,24 @@ async function runAuto() {
   const btn = $("#doRun");
   btn.disabled = true;
   const old = btn.textContent;
-  btn.textContent = t("auto.saving");
   try {
+    // 监听目录必填 —— 否则「保存并开始监测」只会换来一句报错，白跑一趟
+    const watch = autoWatchPatch();
+    if (!watch.watch_root) {
+      toast(t("auto.need_watch_root"));
+      const box = $("#autoWatchRoot");
+      if (box) { go(2); box.focus(); }
+      return;
+    }
+
+    btn.textContent = t("auto.saving");
     // 只落盘「自动监测」关心的这几项；其余（API key 等）走设置面板
     await api("/api/config", {
       translate: currentBackend(),
       translate_order: enabledOrder(),
       keep_local: !$("#cfgKeepLocal") || $("#cfgKeepLocal").checked,
-      backup: $("#cfgBackup") ? $("#cfgBackup").checked : true
+      backup: $("#cfgBackup") ? $("#cfgBackup").checked : true,
+      ...watch
     });
 
     const d = await api("/api/watch/start", {});

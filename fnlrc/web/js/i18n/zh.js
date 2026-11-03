@@ -55,10 +55,11 @@ const STRINGS = {
   "dash.todo_no_lyrics": "没找到歌词",
   "dash.todo_hint": "共 {n} 首，点进去看",
   "dash.todo_clear": "最近一批没有需要处理的事",
-  "dash.todo_none_yet": "还没跑过任务",
+  "dash.todo_watching_clear": "正在监听，目前没有要你处理的。新歌进来会自动处理。",
+  "dash.todo_none_yet": "还没跑过任务。点上面的「自动监测」或「立即执行」开始。",
   "dash.recent_title": "最近的任务",
   "dash.recent_all": "全部历史",
-  "dash.recent_empty": "还没有跑过任务",
+  "dash.recent_empty": "还没有跑过任务。第一次跑完之后，这里会列出最近几次和写入成果。",
   "dash.recent_written": "写入 {n}",
   "dash.recent_failed": "失败 {n}",
 
@@ -69,6 +70,9 @@ const STRINGS = {
   "auto.saving": "正在启动…",
   "auto.started": "已开始监测，新歌会自动补完",
   "auto.start_failed": "启动监测失败：{err}",
+  "auto.need_watch_root": "先填监听目录 —— 它和音乐库路径是两回事",
+  "auto.watch_title": "监听目录",
+  "auto.watch_note": "盯着这个目录，新歌下进来就自动补完。它和上面的音乐库路径是两回事：库是「补哪些歌」，这里是「从哪儿等新歌」。默认只预览不写，勾上「直接写入」才会改你的文件。",
 
   // ── 状态（与后端同名）──────────────────────────────────
   "status.written": "✓ 双语",
