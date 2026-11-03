@@ -15,9 +15,10 @@
 </head>
 <body>
 
-<div class="app">
+<div class="app" id="app" data-view="dash">
 
 <header class="topbar">
+  <button class="btn-ghost backbtn" id="backDash" type="button" data-i18n="dash.back">← 返回概览</button>
   <div class="brand">fnlrc <em data-i18n="app.brand">飞牛歌词补完器</em></div>
   <nav class="tabs tabs--top" role="tablist" aria-label="页面导航">
     <button class="tab" role="tab" data-tab="0" data-i18n="tab.pick">选库</button>
@@ -32,6 +33,68 @@
     <button class="btn-ghost" id="openHistory" type="button" data-i18n="topbar.history">历史</button>
   </div>
 </header>
+
+<!-- ────────────────────── 首页 dashboard：无人值守时的默认落地页 ────────────────────── -->
+<main class="dash" id="dash">
+  <div class="glow indigo"></div>
+  <div class="dashbody">
+
+    <h1 class="dashTitle rv d0" data-i18n="dash.title">歌曲歌词补完</h1>
+    <p class="dashSub rv d75" data-i18n="dash.subtitle">
+      设好一次，新歌下进来就自动补完。也可以随时手动跑一批。
+    </p>
+
+    <!-- 状态条：无人值守最关心「它还活着吗」 -->
+    <section class="dashCard statusCard rv d150" id="dashStatusCard">
+      <div class="statusMain">
+        <span class="dotLive" id="dashDot"></span>
+        <div>
+          <div class="statusLine" id="dashWatchState" data-i18n="dash.watch_unknown">正在读取状态…</div>
+          <div class="small" id="dashWatchMeta"></div>
+        </div>
+      </div>
+      <div class="row" style="gap:.5rem">
+        <button class="btn btn-outline" id="dashToggleWatch" type="button" data-i18n="dash.watch_start">开始监测</button>
+        <button class="btn-ghost" id="dashRefresh" type="button" data-i18n="dash.refresh">刷新</button>
+      </div>
+    </section>
+
+    <!-- 两个入口 -->
+    <section class="grid g2 rv d225 entryGrid">
+      <button class="entryCard entryAuto" id="btnAuto" type="button">
+        <span class="entryTitle" data-i18n="dash.auto_title">自动监测</span>
+        <span class="entryDesc" data-i18n="dash.auto_desc">
+          选库 → 概览 → 补完，配好后一直盯着，新歌自动处理。这里的设置会被记住，作为「立即执行」的默认值。
+        </span>
+      </button>
+      <button class="entryCard entryManual" id="btnManual" type="button">
+        <span class="entryTitle" data-i18n="dash.manual_title">立即执行</span>
+        <span class="entryDesc" data-i18n="dash.manual_desc">
+          手动跑一批，跑完就结束。这里改的设置只对这一次生效，不会改动「自动监测」的配置。
+        </span>
+      </button>
+    </section>
+
+    <!-- 待办：真正会让人点进去的东西 -->
+    <section class="dashCard rv d300">
+      <div class="row" style="justify-content:space-between;margin-bottom:.8rem">
+        <p class="eyebrow" style="margin:0" data-i18n="dash.todo_title">需要你处理</p>
+        <span class="small" id="dashTodoHint"></span>
+      </div>
+      <div id="dashTodo" class="todoGrid"></div>
+    </section>
+
+    <!-- 最近任务：报告是这个工具最有价值的产出，不该藏在两层后面 -->
+    <section class="dashCard rv d300">
+      <div class="row" style="justify-content:space-between;margin-bottom:.8rem">
+        <p class="eyebrow" style="margin:0" data-i18n="dash.recent_title">最近的任务</p>
+        <button class="btn-ghost" id="dashAllHistory" type="button" data-i18n="dash.recent_all">全部历史</button>
+      </div>
+      <div id="dashRecent"><div class="empty" data-i18n="common.loading">读取中…</div></div>
+    </section>
+
+  </div>
+</main>
 
 <main class="panels" id="panels">
 
@@ -97,6 +160,7 @@
     <div class="glow emerald"></div>
     <div class="stage">
       <h2 class="h1 rv d0" data-i18n="preview.title">补完预览</h2>
+      <p class="note rv d75" id="modeHint" hidden></p>
 
       <div class="grid g2 rv d150" style="margin-top:1.2rem;align-items:start">
         <div>

@@ -13,8 +13,28 @@ import { showResults } from "./screens.js";
 let onLangChange = null;
 export function setLangChangeHook(fn) { onLangChange = fn; }
 
-export function initPanels() {
-  $("#openSettings").addEventListener("click", openSettings);
+/** dashboard 上的「开始/停止监测」——走与设置面板完全同一条路径。
+ *  设置面板是弹层，可能还没打开过，所以不能依赖它的表单值：
+ *  停止直接调接口；开始前用服务端已存配置（dashboard 本身不提供表单）。 */
+export async function toggleWatchFromDashboard() {
+  try {
+    if (S.watchRunning) {
+      await api("/api/watch/stop", {});
+      S.watchRunning = false;
+      toast(t("settings.watch_stopped"));
+    } else {
+      const d = await api("/api/watch/start", {});
+      S.watchRunning = !!(d.status && d.status.running);
+      toast(d.already ? t("settings.watch_already") : t("settings.watch_started"));
+      openWatchStream();
+    }
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+/** 从 dashboard 进入流程 */
+export function initPanels() {  $("#openSettings").addEventListener("click", openSettings);
   $("#openHistory").addEventListener("click", openHistory);
 
   // 点遮罩关闭；面板内的 ✕ 关闭

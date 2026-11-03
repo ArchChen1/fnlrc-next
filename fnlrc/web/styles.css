@@ -46,6 +46,73 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
 .app{display:flex;flex-direction:column;min-height:100dvh}
 
 /*
+  两个视图，靠 .app[data-view] 切换：
+    dash  首页 dashboard（无人值守的默认落地页）
+    flow  手动流程的全屏抽屉（选库 → 概览 → 补完 → 进度 → 报告）
+  「抽屉」不做真正 position:fixed 的浮层，而是整页替换 —— 内容更多、手机更好滚，
+  视觉上同样是盖满一屏，点左上角「← 返回概览」退回。
+*/
+.app[data-view="dash"] .panels,
+.app[data-view="dash"] .tabs,
+.app[data-view="dash"] .tabs--bottom,
+.app[data-view="dash"] .backbtn{display:none}
+.app[data-view="dash"] .topbar .tabs--top{display:none}
+.app[data-view="flow"] .dash{display:none}
+
+/* ── 首页 dashboard ─────────────────────────────────────── */
+.dash{position:relative;flex:1 1 auto;display:flex;justify-content:center;
+      padding:2.5rem 1.5rem 4rem;overflow-x:clip}
+.dashbody{position:relative;z-index:1;width:100%;max-width:64rem}
+.dashTitle{font-size:clamp(1.9rem,4.6vw,3rem);font-weight:700;letter-spacing:-.02em;margin:0}
+.dashSub{font-size:clamp(.95rem,1.5vw,1.15rem);line-height:1.6;
+         color:rgba(255,255,255,.65);margin:.7rem 0 2rem;max-width:34rem}
+.dashCard{border:1px solid var(--line);border-radius:1.25rem;padding:1.25rem;
+          margin-top:1.25rem;background:rgba(255,255,255,.02)}
+@media(min-width:768px){.dashCard{padding:1.6rem}}
+.statusCard{display:flex;align-items:center;justify-content:space-between;
+            gap:1rem;flex-wrap:wrap;margin-top:0}
+.statusMain{display:flex;align-items:center;gap:.9rem;min-width:0}
+.statusLine{font-size:1.0625rem;font-weight:600;line-height:1.3}
+/* 活着/停了的指示灯：只有这里是彩色的，其余全站黑白 */
+.dotLive{width:.7rem;height:.7rem;border-radius:var(--radius-full);flex:none;
+         background:rgba(255,255,255,.25);transition:background-color .3s}
+.dotLive.on{background:#5eead4;animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.entryGrid{margin-top:1.25rem}
+.entryCard{display:flex;flex-direction:column;gap:.5rem;text-align:left;
+           font:inherit;color:#fff;cursor:pointer;padding:1.4rem;
+           border:1px solid var(--line);border-radius:1.25rem;
+           background:rgba(255,255,255,.03);
+           transition:background-color .25s,border-color .25s,transform .25s var(--ease)}
+.entryCard:hover{border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.07);
+                 transform:translateY(-2px)}
+.entryCard:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.entryAuto{background:linear-gradient(135deg,rgba(79,70,229,.22),rgba(126,34,206,.16))}
+.entryManual{background:linear-gradient(135deg,rgba(8,145,178,.2),rgba(37,99,235,.14))}
+.entryTitle{font-size:1.125rem;font-weight:700}
+.entryDesc{font-size:.8125rem;line-height:1.65;color:rgba(255,255,255,.62)}
+
+.todoGrid{display:grid;gap:.6rem}
+@media(min-width:640px){.todoGrid{grid-template-columns:repeat(3,1fr)}}
+.todoCell{border:1px solid var(--line);border-radius:1rem;padding:.9rem 1rem;
+          text-align:left;font:inherit;color:#fff;cursor:pointer;
+          background:transparent;transition:background-color .2s,border-color .2s}
+.todoCell:hover{border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.06)}
+.todoCell .n{font-size:1.5rem;font-weight:700;line-height:1.1}
+.todoCell .k{font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;
+             color:rgba(255,255,255,.5);margin-top:.25rem}
+.todoCell.hasAlert{border-color:rgba(248,113,113,.5)}
+.todoCell.hasAlert .n{color:var(--bad)}
+
+.recentRow{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
+           padding:.65rem 0;border-bottom:1px solid var(--line-soft)}
+.recentRow:last-child{border-bottom:0}
+.recentRow .grow{flex:1 1 14rem;min-width:0}
+.recentRow .path{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                 font-family:var(--mono);font-size:.8125rem}
+
+/*
   面板不再等于视口高 —— 按内容自然高度，外层页面正常滚动。
   这就是本次改版的核心：去掉 100dvh + scroll-snap 的几何硬约束，
   表格 / 日志数据变多时页面自己变长，不再被迫塞进内部小滚动条。
@@ -199,6 +266,10 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .brand{font-weight:700;letter-spacing:-.01em;font-size:1rem;white-space:nowrap}
 .brand em{font-style:normal;color:rgba(255,255,255,.45);font-weight:400;
           margin-left:.6rem;font-size:.8125rem}
+/* 返回 dashboard：只在手动流程（抽屉）里出现 */
+.backbtn{display:none}
+.app[data-view="flow"] .backbtn{display:inline-flex;align-items:center}
+.app[data-view="flow"] .brand{display:none}
 
 /* 桌面：顶栏中间的横排 Tab 条；手机隐藏（改用底部栏） */
 .tabs{display:flex;align-items:center;gap:.25rem}

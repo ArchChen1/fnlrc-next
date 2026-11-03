@@ -225,7 +225,10 @@ def _scan(root: str, limit: int | None, only: str | None = None):
 def scan(payload: dict = Body(...)):
     root = payload.get("root", "")
     songs = _scan(root, payload.get("limit"))
-    store.save_config({"last_root": root})
+    # 「立即执行」模式不落盘：这次选的库不该改掉长期配置（M6）。
+    # 缺省仍为 True，老前端行为不变。
+    if payload.get("persist", True):
+        store.save_config({"last_root": root})
     return {"root": root, "summary": lib.summarize(songs)}
 
 

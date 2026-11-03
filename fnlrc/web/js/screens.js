@@ -8,9 +8,17 @@ import { $, $$, esc, api, toast, fmtTime } from "./core.js";
 import { t } from "./i18n/index.js";
 import { openFsBrowser } from "./fsbrowser.js";
 import { openManual, canEdit } from "./manual.js";
+import { persistEnabled } from "./dashboard.js";
 
 const TAB_KEY = "fnlrc_tab";
 const TAB_COUNT = 5;
+
+/** 自动监测模式只复用前 3 步（选库 / 概览 / 补完），后两步是手动流程专有 */
+const AUTO_TABS = 3;
+
+function tabCount() {
+  return S.mode === "auto" ? AUTO_TABS : TAB_COUNT;
+}
 
 /* ─────────────────────────────────────────── Tab 切换 */
 
@@ -49,9 +57,10 @@ export function initTabs() {
   // 键盘：左右箭头切 Tab；面板/弹层打开时不抢键
   addEventListener("keydown", e => {
     if ($(".overlay.open")) return;
+    if ($("#app")?.dataset.view === "dash") return;
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     if (e.key === "ArrowRight") {
-      e.preventDefault(); go(Math.min(currentTab() + 1, TAB_COUNT - 1));
+      e.preventDefault(); go(Math.min(currentTab() + 1, tabCount() - 1));
     } else if (e.key === "ArrowLeft") {
       e.preventDefault(); go(Math.max(currentTab() - 1, 0));
     }
@@ -62,6 +71,8 @@ export function initTabs() {
   try { saved = parseInt(localStorage.getItem(TAB_KEY), 10); } catch (e) { /* 隐私模式 */ }
   const lost = Number.isInteger(saved) && saved > 0 && saved < TAB_COUNT && lockReason(saved);
   if (!Number.isInteger(saved) || saved < 0 || saved >= TAB_COUNT || lost) saved = 0;
+  // 自动监测只到第 3 步，别恢复到一个根本不存在的 Tab
+  if (saved >= tabCount()) saved = tabCount() - 1;
 
   syncTabLocks();
   go(saved);
@@ -71,6 +82,36 @@ export function initTabs() {
 
 export function currentTab() {
   return S.tab || 0;
+}
+
+/**
+ * 按当前模式刷新界面外壳：
+ *   auto   —— 只露出前 3 个 Tab，主按钮变成「保存并开始监测」
+ *   manual —— 完整 5 个 Tab，主按钮仍是「开始补完」
+ * 进入流程时调一次；切语言时也靠 rerender 再调一次。
+ */
+export function applyMode() {
+  const auto = S.mode === "auto";
+
+  $$(".tab").forEach(el => {
+    const i = +el.dataset.tab;
+    el.hidden = auto && i >= AUTO_TABS;
+  });
+
+  const run = $("#doRun");
+  if (run) run.textContent = auto ? t("auto.save_start") : t("preview.run");
+
+  const note = $("#preview.not_written");
+  const modeHint = $("#modeHint");
+  if (modeHint) {
+    modeHint.textContent = auto ? t("mode.auto_hint") : t("mode.manual_hint");
+    modeHint.hidden = !S.mode;
+  }
+  if (note) note.hidden = auto;   // 自动模式不写库，这句没意义
+
+  // 自动模式没有「进度 / 报告」Tab，别停在那两个上面
+  if (auto && S.tab >= AUTO_TABS) go(0);
+  syncTabLocks();
 }
 
 /**
@@ -89,7 +130,7 @@ export function requestTab(i) {
  * （否则从一个长面板切到短面板会停在半空）。
  */
 export function go(i) {
-  if (i < 0 || i >= TAB_COUNT) return;
+  if (i < 0 || i >= tabCount()) return;
   S.tab = i;
 
   $$(".panel").forEach((p, j) => { p.hidden = j !== i; });
@@ -130,8 +171,9 @@ async function startScan() {
   const btn = $("#doScan");
   btn.disabled = true; btn.textContent = t("pick.scanning");
   try {
-    const d = await api("/api/scan", { root });
-    adoptScanned(root, d.summary);
+    // 立即执行：不把这次选的库写成「上次的库」—— 改了只对这一次生效
+    const d = await api("/api/scan", { root, persist: persistEnabled() });
+    adoptScanned(root, d.summary, { remember: persistEnabled() });
     go(1);
   } catch (e) {
     toast(t("pick.scan_failed", { err: e.message }));
@@ -144,10 +186,11 @@ async function startScan() {
  * 接管一次成功的扫描：写回主界面、记住状态并渲染概览。
  * 首次使用引导（wizard.js）复用它 —— 引导里扫到的库直接进主界面，用户不用再扫一遍。
  */
-export function adoptScanned(root, summary) {
+export function adoptScanned(root, summary, opts) {
   S.root = root;
   S.summary = summary;
-  localStorage.setItem("fnlrc_root", root);
+  // 只有持久模式（自动监测 / 引导）才记住路径，手动执行不留痕
+  if (!opts || opts.remember !== false) localStorage.setItem("fnlrc_root", root);
   const input = $("#root");
   if (input) input.value = root;
   renderSummary(summary, root);
@@ -247,6 +290,8 @@ function renderPreview(d) {
 
 async function doRun() {
   if (!S.root) { toast(t("preview.need_scan")); go(0); return; }
+  if (S.mode === "auto") { await runAuto(); return; }
+
   const body = {
     root: S.root,
     write: !$("#previewMode").checked,
@@ -282,6 +327,43 @@ function setProgress(done, total, labelKey) {
   $("#progText").textContent = `${t(labelKey)}　${done} / ${total}`;
   // 记住状态：切语言时能按新语言重画，而不是停在最初那句
   S.progress = { done, total, labelKey };
+}
+
+/**
+ * 自动监测模式下的「保存并开始监测」。
+ *
+ * 自动监测复用前 3 步收集配置，然后：
+ *   1. **持久化**（这是它与「立即执行」的关键区别）；
+ *   2. 把选库路径同时设为监听目录的来源 —— 监听配置仍是设置面板里那一份；
+ *   3. 启动监听，然后回 dashboard 看状态条。
+ *
+ * 它不写任何音乐文件：写入由监听在真正发现新歌时决定。
+ */
+async function runAuto() {
+  const btn = $("#doRun");
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = t("auto.saving");
+  try {
+    // 只落盘「自动监测」关心的这几项；其余（API key 等）走设置面板
+    await api("/api/config", {
+      translate: currentBackend(),
+      keep_local: !$("#cfgKeepLocal") || $("#cfgKeepLocal").checked,
+      backup: $("#cfgBackup") ? $("#cfgBackup").checked : true
+    });
+
+    const d = await api("/api/watch/start", {});
+    if (d.status && d.status.running) S.watchRunning = true;
+    toast(d.already ? t("settings.watch_already") : t("auto.started"));
+
+    const { backToDash } = await import("./dashboard.js");
+    backToDash();
+  } catch (e) {
+    toast(t("auto.start_failed", { err: e.message }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old || t("preview.run");
+  }
 }
 
 /** 切语言后重画进度那行（其它部分不依赖语言不了） */

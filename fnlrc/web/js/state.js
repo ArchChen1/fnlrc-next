@@ -67,5 +67,7 @@ export const S = {
   watchRunning: false,
   filter: "all",
   /** 当前 Tab 序号（0..4），M5 起代替原来的 scenes */
-  tab: 0
+  tab: 0,
+  /** 进入流程的模式：""（在 dashboard）/ "auto"（自动监测）/ "manual"（立即执行） */
+  mode: ""
 };
