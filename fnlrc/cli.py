@@ -121,6 +121,70 @@ def cmd_run(a) -> int:
     return 2 if stats.get("failed") else 0
 
 
+# ---------------------------------------------------------------- watch（M1）
+def cmd_watch(a) -> int:
+    """监听一个目录，新歌落盘即自动补双语。前台常驻，Ctrl-C 优雅退出。"""
+    from . import watcher
+
+    cfg = store.load_config()
+    wcfg = store.watch_config(cfg)
+
+    root = a.root or wcfg["watch_root"]
+    if not root:
+        print("❌ 没有指定监听目录：加 --root，或先设置 watch_root", file=sys.stderr)
+        return 1
+    if not os.path.isdir(root):
+        print(f"❌ 打不开这个路径：{root}", file=sys.stderr)
+        return 1
+
+    after = a.after or wcfg["watch_after"]
+    move_to = a.move_to or wcfg["watch_move_to"]
+    if after in ("copy", "move") and not move_to:
+        print("❌ --after copy/move 必须同时给 --move-to", file=sys.stderr)
+        return 1
+    if move_to and move_to == root:
+        print("❌ 监听目录和目标目录不能是同一个", file=sys.stderr)
+        return 1
+
+    # 监听模式默认直写旁挂（目标就是暂存目录）；--no-write 只 dump 预览
+    do_write = not a.no_write
+    quiet = a.quiet if a.quiet is not None else wcfg["watch_quiet_s"]
+    poll = a.poll if a.poll is not None else wcfg["watch_poll_s"]
+
+    base = _config_from_args(a)
+    base.write = do_write
+    if not do_write:
+        base.dump_dir = a.dump or base.dump_dir
+
+    dry = bool(a.dry_run)
+    print(f"监听目录: {root}")
+    print(f"  模式   : {'直写旁挂' if do_write else '只预览（不写库）'}"
+          f"{'（dry-run：连预览都不落盘）' if dry else ''}")
+    print(f"  搬运   : {after}" + (f" → {move_to}" if after in ('copy', 'move') else ""))
+    print(f"  轮询 {poll:g}s · 静默 {quiet:g}s · 翻译后端 {base.translate}")
+    if after in ("copy", "move") and dry:
+        print("  （dry-run：只打印'会送到哪'，不动文件）")
+    print("  Ctrl-C 退出。\n", flush=True)
+
+    def on_event(ev):
+        if ev.get("event") == "done":
+            r = ev.get("result") or {}
+            moved = r.get("moved_to") or r.get("copied_to")
+            tail = f" → {moved}" if moved else ""
+            note = f"  {r.get('note')}" if r.get("note") else ""
+            print(f"  {r.get('status', ''):<16} {r.get('file', '')}{tail}{note}", flush=True)
+
+    w = watcher.FolderWatcher(roots=[root], cfg=base, after=after, move_to=move_to,
+                              quiet_s=quiet, poll_s=poll, on_event=on_event,
+                              dry_run=dry, log=_log)
+    try:
+        w.start()
+    except KeyboardInterrupt:
+        print("\n已停止。", file=sys.stderr)
+        w.stop()
+    return 0
+
+
 # ---------------------------------------------------------------- report
 def cmd_report(a) -> int:
     with open(a.frm, encoding="utf-8") as fh:
@@ -304,6 +368,27 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--status")
     rep.add_argument("--csv")
     rep.set_defaults(fn=cmd_report)
+
+    w = sub.add_parser("watch", help="监听目录，新歌落盘即自动补双语（前台常驻）")
+    w.add_argument("--root", help="要监听的暂存目录（不填则用配置里的 watch_root）")
+    w.add_argument("--after", choices=["keep", "copy", "move"],
+                   help="处理完成后：keep=不动（默认）/ copy=复制到目标 / move=移动到目标")
+    w.add_argument("--move-to", help="目标目录（--after copy/move 时必填）")
+    w.add_argument("--no-write", action="store_true",
+                   help="只生成到 dump 目录，不写音乐库（预览）")
+    w.add_argument("--dump", help="--no-write 时的输出目录（默认 ./fnlrc_out）")
+    w.add_argument("--quiet", type=float, help="落盘静默期秒数（默认 8）")
+    w.add_argument("--poll", type=float, help="轮询间隔秒数（默认 5）")
+    w.add_argument("--dry-run", action="store_true",
+                   help="只打印会做什么，不写文件也不搬运（首次启用建议先跑）")
+    w.add_argument("--force", action="store_true", help="已有合规双语也重做")
+    w.add_argument("--translate", choices=["source", "remote", "none"])
+    w.add_argument("--remote-base")
+    w.add_argument("--remote-key")
+    w.add_argument("--remote-model")
+    w.add_argument("--rebuild-local", action="store_true",
+                   help="外文单语歌词不保留本地时间轴，按源站整份重抓")
+    w.set_defaults(fn=cmd_watch)
 
     c = sub.add_parser("config", help="查看/修改配置（不含 API key 明文）")
     c.add_argument("--set", action="append", metavar="K=V")

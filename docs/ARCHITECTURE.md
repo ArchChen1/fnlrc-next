@@ -24,6 +24,7 @@ fnlrc/
 │   ├── library.py            ★ 扫描 / 标签 / 编码嗅探 / 纯音乐判定 / 库统计
 │   ├── providers.py          ★ 数据源 + 翻译后端 + 节流重试时限
 │   ├── pipeline.py           ★ 单曲决策 + 批量执行（三端唯一入口）
+│   ├── watcher.py            监听文件夹：纯轮询、静默期、搬运、重试、状态落盘
 │   ├── fnos.py               飞牛歌词库：探测 / 差异计划 / 原地回填（**零第三方依赖**）
 │   ├── store.py               配置 / 访问令牌 / 任务报告
 │   ├── server.py               FastAPI 应用（HTTP + SSE + 静态前端）
@@ -49,12 +50,13 @@ fnlrc/
 | `library.py` | 文件系统层的库：遍历、标签、编码、乱码识别、语言预期、统计 | 网络、写入 |
 | `providers.py` | 外部世界的边界：网易云、LRCLIB、远端 API（DeepSeek）；匹配打分与**译文对齐** | 决策（要不要翻、要不要写） |
 | `pipeline.py` | **决策与编排**：选源 → 校验 → 译文对齐/翻译降级 → 重试 → 写/不写 → 结果 | IO 细节、UI |
+| `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重 | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
 | `fnos.py` | 飞牛数据库的只读探测、差异计划、原地回填（已有歌词）与**补建歌词行**（没有歌词的歌，要 `--allow-insert`） | 歌词的获取与翻译（它只负责"把已生成的 `.lrc` 搬进飞牛"） |
 | `store.py` | 任务与结果的持久化、配置与令牌、回滚 | 业务逻辑 |
 | `server.py` | HTTP 契约、SSE 进度、静态资源 | 业务逻辑（调用 pipeline） |
 | `desktop.py` | 起本地服务 + 原生窗口 + 文件夹对话框 | 业务逻辑 |
 
-**依赖方向严格单向**：`pipeline → providers/library/lrc`，`server/cli/desktop → pipeline`。核心永远不知道 UI 的存在。
+**依赖方向严格单向**：`pipeline → providers/library/lrc`，`server/cli/desktop/watcher → pipeline`。核心永远不知道 UI 的存在。
 
 `fnos.py` 刻意**不 import 本项目任何东西** —— 只用标准库，所以能单独 `scp` 到 NAS 上跑（见 [FNOS-SIDECAR.md](FNOS-SIDECAR.md)）。
 
@@ -227,6 +229,10 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | `GET` | `/api/write-test?path=` | 测试目标目录能否写入（SMB 只读挂载 / 容器权限会在这里现形） | — |
 | `POST` | `/api/fnos/preview` | `{app_data, appmeta, music_root?}` → 飞牛歌词库的**只读**探测或差异计划 | — |
 | `POST` | `/api/fnos/apply` | `{app_data, appmeta, music_root, expect_changed}` → 原地回填 | ✅ |
+| `GET` | `/api/watch/status` | 监听运行状态（`running` / `counts` / `seen` / `handled` / 各配置项） | — |
+| `POST` | `/api/watch/start` | 按**已保存的** watch 配置启动监听线程（请求体被忽略）；校验目录存在、搬运目标存在、不同目录 | ✅ |
+| `POST` | `/api/watch/stop` | 停止监听线程（当前这首处理完即停） | ✅ |
+| `GET` | `/api/watch/events` | **SSE** 监听事件流（`{type:"watch",event,file,rel,result}`；令牌走查询串） | — |
 | `GET` | `/api/probe/ollama` | 410 Gone —— 本地模型后端已移除，保留此路由只为给旧前端一个明确的答复 | — |
 
 `/api/run` 的 `keep_local` 省略时**跟随服务端配置**（默认开）。这样网页版的勾选框
@@ -236,6 +242,11 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 ① 服务端要显式设 `FNLRC_ENABLE_FNOS_WRITE=1`（默认关）；② 请求里的 `expect_changed`
 必须与**当下重新算出的**差异数一致 —— 预览之后库里状态变了就拒绝执行（409），
 不会照着过期结果去写。
+
+`/api/watch/start` **读已保存的配置**、忽略请求体。这样界面显示与实际行为不会分裂：
+面板点「开始监听」时会先把输入框的值 `POST /api/config` 存一次，再 start。
+监听线程是**纯轮询**（不依赖文件系统事件，SMB 上也能用），把已处理文件的状态
+落盘 `watch-state.json`，重启后不重跑未变化的文件（详见 `watcher.py` 与 ADR-019）。
 
 ### 写操作的守卫（三层，缺一不可）
 
@@ -264,6 +275,18 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 
 `written_keep_local` 是 `written` 的**子集**（`written` 里已经有它），单独列出来是为了
 让前端能显示"其中 N 首保住了本地时间轴"。
+
+监听事件流（`/api/watch/events`）的格式不同 —— 它是**一路持续**的，不分 job：
+
+```jsonc
+{"type":"watch","event":"processing","file":"C:\\inbox\\歌.flac","rel":"歌.flac","result":null}
+{"type":"watch","event":"done","file":"C:\\inbox\\歌.flac","rel":"歌.flac",
+ "result":{"status":"written","note":"","pairs":48,"…":"…"}}
+```
+
+`event` 只有 `processing` 与 `done` 两种；`done` 事件的 `result` 就是 `process_song`
+的返回（含 `trigger:"watch"` 与 `path`，见报告）。期间服务端每 15 秒发一个
+`: keep-alive` 注释行保活。
 
 ### 任务与并发
 

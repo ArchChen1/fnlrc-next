@@ -67,6 +67,7 @@ export const S = {
   results: [],
   stats: {},
   config: {},
+  watchRunning: false,
   filter: "all",
   scenes: []
 };

@@ -26,6 +26,8 @@ export function initPanels() {
   $("#fnosProbe").addEventListener("click", () => fnosRun("probe"));
   $("#fnosPreview").addEventListener("click", () => fnosRun("plan"));
   $("#fnosApply").addEventListener("click", fnosApply);
+  $("#watchSave").addEventListener("click", saveWatch);
+  $("#watchToggle").addEventListener("click", toggleWatch);
 }
 
 /* ─────────────────────────────────────────── 回填到飞牛 */
@@ -184,6 +186,99 @@ function applyConfig(c) {
     picked.checked = true;
     picked.dispatchEvent(new Event("change"));
   }
+
+  applyWatchConfig(c.watch || {}, !!c.watch_running);
+}
+
+/** 监听设置区：先用服务端存的值回填，再按运行状态刷按钮。 */
+function applyWatchConfig(w, running) {
+  $("#watchRoot").value = w.watch_root || "";
+  $("#watchAfter").value = w.watch_after || "keep";
+  $("#watchMoveTo").value = w.watch_move_to || "";
+  $("#watchWrite").checked = w.watch_write !== false;
+  $("#watchQuiet").value = w.watch_quiet_s != null ? w.watch_quiet_s : 8;
+  $("#watchPoll").value = w.watch_poll_s != null ? w.watch_poll_s : 5;
+  $("#watchAutostart").checked = !!w.watch_autostart;
+  setWatchRunning(running);
+  if (running) openWatchStream();   // 刷新页面后，若服务端还在监听就重连事件流
+}
+
+function setWatchRunning(running) {
+  S.watchRunning = running;
+  const btn = $("#watchToggle");
+  if (btn) btn.textContent = running ? "停止监听" : "开始监听";
+  const st = $("#watchState");
+  if (st) st.textContent = running ? "● 正在监听" : "已停止";
+  if (st) st.style.color = running ? "#5eead4" : "";
+}
+
+function watchPatch() {
+  return {
+    watch_root: $("#watchRoot").value.trim(),
+    watch_after: $("#watchAfter").value,
+    watch_move_to: $("#watchMoveTo").value.trim(),
+    watch_write: $("#watchWrite").checked,
+    watch_quiet_s: parseInt($("#watchQuiet").value, 10) || 8,
+    watch_poll_s: parseInt($("#watchPoll").value, 10) || 5,
+    watch_autostart: $("#watchAutostart").checked
+  };
+}
+
+async function saveWatch() {
+  try {
+    S.config = await api("/api/config", watchPatch());
+    toast("监听设置已保存");
+  } catch (e) {
+    toast("保存失败：" + e.message);
+  }
+}
+
+/** 开始/停止。开始前先把面板上的值存一次，省得用户忘了点保存。 */
+async function toggleWatch() {
+  const btn = $("#watchToggle");
+  const st = $("#watchState");
+  btn.disabled = true;
+  try {
+    if (S.watchRunning) {
+      await api("/api/watch/stop", {});
+      setWatchRunning(false);
+      toast("已停止监听");
+    } else {
+      await api("/api/config", watchPatch());     // 先落盘，start 读的是已存配置
+      const d = await api("/api/watch/start", {});
+      setWatchRunning(!!(d.status && d.status.running));
+      toast(d.already ? "本来就在监听" : "开始监听");
+      openWatchStream();
+    }
+  } catch (e) {
+    if (st) { st.textContent = "❌ " + e.message; st.style.color = ""; }
+    toast(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* SSE：把监听事件追加到日志框。断线后浏览器会自动重连。 */
+let watchSrc = null;
+function openWatchStream() {
+  if (!S.token || watchSrc) return;
+  const url = "/api/watch/events?token=" + encodeURIComponent(S.token);
+  watchSrc = new EventSource(url);
+  watchSrc.onmessage = ev => {
+    let d;
+    try { d = JSON.parse(ev.data); } catch { return; }
+    const log = $("#watchLog");
+    if (!log) return;
+    const r = d.result || {};
+    const name = d.rel || r.file || (d.file || "").split(/[\\/]/).pop();
+    const mark = d.event === "processing" ? "… 处理中"
+               : (r.status || d.event || "完成");
+    const note = r.note ? `  (${r.note})` : "";
+    const line = `[${new Date().toLocaleTimeString()}] ${name} → ${mark}${note}`;
+    log.textContent = (log.textContent + "\n" + line).trim().split("\n").slice(-200).join("\n");
+    log.scrollTop = log.scrollHeight;
+  };
+  watchSrc.onerror = () => { /* 静默重连；服务停了会一直重试 */ };
 }
 
 async function saveSettings() {

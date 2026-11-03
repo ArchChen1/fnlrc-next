@@ -477,3 +477,52 @@ def test_不开启新建时差异数只算原地更新(client, auth, fnlib_with_
                      json={"app_data": str(ad), "appmeta": str(am), "music_root": str(music),
                            "expect_changed": d["changed"], "allow_insert": True})
     assert r2.status_code == 409, "总数对不上时必须拒绝，不能照着过期结果写"
+
+
+# ---------------------------------------------------------------- 监听文件夹接口
+def test_监听默认没在跑(client):
+    d = client.get("/api/watch/status").json()
+    assert d["running"] is False
+    assert d["handled"] == 0
+    cfg = client.get("/api/config").json()
+    assert cfg["watch_running"] is False
+    assert cfg["watch"]["watch_after"] == "keep"
+
+
+def test_启动停止需要令牌(client):
+    assert client.post("/api/watch/start").status_code == 401
+    assert client.post("/api/watch/stop").status_code == 401
+
+
+def test_没填目录时拒绝启动(client, auth):
+    r = client.post("/api/watch/start", headers=auth)
+    assert r.status_code == 400
+    assert "目录" in r.json()["detail"]
+
+
+def test_目录不存在时拒绝启动(client, auth, tmp_path):
+    store.save_config({"watch_root": str(tmp_path / "nope")})
+    r = client.post("/api/watch/start", headers=auth)
+    assert r.status_code == 400
+
+
+def test_搬运到不存在目录时拒绝(client, auth, tmp_path):
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_after": "move",
+                       "watch_move_to": str(tmp_path / "nope")})
+    r = client.post("/api/watch/start", headers=auth)
+    assert r.status_code == 400
+
+
+def test_启动后状态变为running(client, auth, tmp_path):
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_poll_s": 0.3, "watch_quiet_s": 0})
+    r = client.post("/api/watch/start", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["status"]["running"] is True
+    assert client.get("/api/watch/status").json()["running"] is True
+    # 收工
+    assert client.post("/api/watch/stop", headers=auth).status_code == 200
+    assert client.get("/api/watch/status").json()["running"] is False

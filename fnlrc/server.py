@@ -46,6 +46,10 @@ WEB_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "web
 JOBS: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 
+# 监听器（M1）。同一时刻只跑一个；结构上像 JOBS 一样按状态存，便于将来放开多目录。
+_watch: dict = {"thread": None, "stop": None, "watcher": None, "events": None}
+_watch_lock = threading.Lock()
+
 
 # ---------------------------------------------------------------- 安全
 def _is_loopback(host: str | None) -> bool:
@@ -157,6 +161,9 @@ def get_config():
         # 首次使用引导：全新环境 / 配置损坏时为真，前端据此决定是否显示欢迎流程
         "setup_needed": store.setup_needed(),
         "setup_version": store.SETUP_VERSION,
+        # 监听文件夹（M1）：整份 watch 配置 + 运行状态
+        "watch": store.watch_config(cfg),
+        "watch_running": _watch_is_running(),
     }
 
 
@@ -395,6 +402,119 @@ def rollback(request: Request, payload: dict = Body(...),
     return {"rolled_back": undone, "skipped": skipped}
 
 
+# ---------------------------------------------------------------- 监听（M1）
+def _watch_build(cfg: dict):
+    """按配置构造一个 FolderWatcher。配置的默认值来自 store.watch_config()。"""
+    from . import watcher as W
+
+    wc = store.watch_config(cfg)
+    base = _config_from({"write": bool(wc["watch_write"])})
+    base.force = False
+    stop = threading.Event()
+
+    def on_event(ev):
+        q = _watch.get("events")
+        if q is not None:
+            q.put(ev)
+
+    w = W.FolderWatcher(
+        roots=[wc["watch_root"]], cfg=base,
+        after=wc["watch_after"], move_to=wc["watch_move_to"],
+        quiet_s=wc["watch_quiet_s"], poll_s=wc["watch_poll_s"],
+        on_event=on_event, should_stop=stop.is_set)
+    return w, stop, wc
+
+
+def _watch_validate(wc: dict) -> str | None:
+    """返回错误信息；配置没问题则返回 None。"""
+    root = wc.get("watch_root") or ""
+    if not root:
+        return "还没设置监听目录"
+    if not os.path.isdir(root):
+        return f"打不开这个路径：{root}"
+    if wc.get("watch_after") in ("copy", "move"):
+        if not wc.get("watch_move_to"):
+            return "搬运模式是复制/移动，但还没填目标目录"
+        if os.path.abspath(wc["watch_move_to"]) == os.path.abspath(root):
+            return "监听目录和目标目录不能是同一个"
+        if not os.path.isdir(wc["watch_move_to"]):
+            return f"目标目录不存在：{wc['watch_move_to']}"
+    return None
+
+
+def _watch_is_running() -> bool:
+    t = _watch.get("thread")
+    return bool(t and t.is_alive())
+
+
+@app.get("/api/watch/status")
+def watch_status():
+    w = _watch.get("watcher")
+    snap = w.snapshot() if w is not None else {"running": False, "counts": {}, "seen": 0,
+                                               "handled": 0}
+    snap["running"] = _watch_is_running()
+    snap["config"] = store.watch_config()
+    return snap
+
+
+@app.post("/api/watch/start")
+def watch_start(request: Request, x_fnlrc_token: str | None = Header(default=None)):
+    require_token(request, x_fnlrc_token)
+    with _watch_lock:
+        if _watch_is_running():
+            return {"ok": True, "already": True, "status": watch_status()}
+        wc = store.watch_config()
+        err = _watch_validate(wc)
+        if err:
+            raise HTTPException(400, err)
+        w, stop, _ = _watch_build(store.load_config())
+        _watch["watcher"] = w
+        _watch["stop"] = stop
+        _watch["events"] = queue.Queue()
+        t = threading.Thread(target=w.start, daemon=True, name="fnlrc-watch")
+        _watch["thread"] = t
+        t.start()
+    return {"ok": True, "status": watch_status()}
+
+
+@app.post("/api/watch/stop")
+def watch_stop(request: Request, x_fnlrc_token: str | None = Header(default=None)):
+    require_token(request, x_fnlrc_token)
+    stop = _watch.get("stop")
+    if stop is not None:
+        stop.set()
+    t = _watch.get("thread")
+    if t is not None:
+        t.join(timeout=10)
+    with _watch_lock:
+        _watch["thread"] = None
+        _watch["stop"] = None
+        # watcher 保留，便于 /status 回显最后一次的 counts
+    return {"ok": True, "status": watch_status()}
+
+
+@app.get("/api/watch/events")
+def watch_events(token: str | None = Query(default=None)):
+    """SSE：监听事件流。EventSource 不能带自定义头，令牌走查询串（与 job_events 同）。"""
+    q = _watch.get("events")
+    if q is None:
+        raise HTTPException(404, "监听没有在运行")
+
+    def gen():
+        while True:
+            try:
+                ev = q.get(timeout=15)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                if not _watch_is_running():
+                    break
+                continue
+            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 # ---------------------------------------------------------------- 目录浏览
 @app.get("/api/fs")
 def browse(path: str = ""):
@@ -534,6 +654,25 @@ def fnos_apply(request: Request, payload: dict = Body(...),
 # 放在最后：显式的 "/" 路由先匹配（它需要在回环访问时注入令牌），
 # 其余路径（/styles.css、/js/*.js）交给静态目录。
 # 前端拆成多文件而不是单个 index.html：几件事的复杂度不同（设计 token / 场景渲染 /
-# 面板 / 目录浏览），塞进一个文件只会都变难读。用原生 ES module，仍然零构建步骤。
+# 面板 / 目录浏览），塞进一个文件只会都变难读。用原生 ES module，仍然零构建步骤。@app.on_event("startup")
+def _maybe_autostart_watch():
+    """服务启动时按配置自动开监听（`watch_autostart`，默认关）。"""
+    if not store.watch_config().get("watch_autostart"):
+        return
+    try:
+        wc = store.watch_config()
+        if _watch_validate(wc):
+            return
+        w, stop, _ = _watch_build(store.load_config())
+        _watch["watcher"] = w
+        _watch["stop"] = stop
+        _watch["events"] = queue.Queue()
+        t = threading.Thread(target=w.start, daemon=True, name="fnlrc-watch")
+        _watch["thread"] = t
+        t.start()
+        print(f"已按配置自动开始监听：{wc['watch_root']}", file=sys.stderr)
+    except Exception as e:
+        print(f"自动监听启动失败：{P.mask_secret(str(e))}", file=sys.stderr)
+
 if WEB_DIR.is_dir():
     app.mount("/", StaticFiles(directory=str(WEB_DIR), check_dir=False), name="web")

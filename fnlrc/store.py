@@ -39,6 +39,14 @@ CONFIG_KEYS = (
     # 首次使用引导（M1 前置）用：点过「完成」或「跳过」后置真，之后不再打扰
     "setup_done",
     "setup_version",
+    # 监听文件夹（M1）
+    "watch_root",          # 监听的暂存目录（单个；能力支持多个，界面先暴露一个）
+    "watch_after",         # keep=不动 / copy=复制 / move=移动
+    "watch_move_to",       # 目标目录（copy/move 时必填）
+    "watch_write",         # True=直接写旁挂；False=只 dump 预览
+    "watch_quiet_s",       # 落盘静默期
+    "watch_poll_s",        # 轮询间隔
+    "watch_autostart",     # 服务启动时是否自动开监听
 )
 SECRET_KEYS = ("remote_api_key",)
 # 引导口径的版本号。将来引导流程大改（新增步骤）时可抬高它，让老用户再走一次。
@@ -149,8 +157,6 @@ def api_key_locked() -> bool:
 
 def token_path() -> Path:
     return data_dir() / "token"
-
-
 def get_token(create: bool = True) -> str:
     """本机访问令牌。首次调用时生成并落盘。
 
@@ -177,6 +183,40 @@ def new_token() -> str:
     t = secrets.token_urlsafe(24)
     _write_private(token_path(), t)
     return t
+
+
+# ---------------------------------------------------------------- 监听（M1）
+# watch_* 的默认值只有这一处来源：CLI、Web、桌面都从这里取，避免三处各写一份默认值。
+WATCH_DEFAULTS = {
+    "watch_root": "",
+    "watch_after": "keep",
+    "watch_move_to": "",
+    "watch_write": True,
+    "watch_quiet_s": 8,
+    "watch_poll_s": 5,
+    "watch_autostart": False,
+}
+
+
+def watch_config(cfg: dict | None = None) -> dict:
+    """取一份带默认值的 watch 配置。缺失的键用默认值补上。"""
+    cfg = cfg if cfg is not None else load_config()
+    out = dict(WATCH_DEFAULTS)
+    for k in WATCH_DEFAULTS:
+        if k in cfg and cfg[k] not in (None, ""):
+            out[k] = cfg[k]
+    # 类型规整：JSON 里存进来的可能是字符串
+    out["watch_write"] = bool(out["watch_write"])
+    out["watch_autostart"] = bool(out["watch_autostart"])
+    try:
+        out["watch_quiet_s"] = float(out["watch_quiet_s"])
+    except (TypeError, ValueError):
+        out["watch_quiet_s"] = WATCH_DEFAULTS["watch_quiet_s"]
+    try:
+        out["watch_poll_s"] = float(out["watch_poll_s"])
+    except (TypeError, ValueError):
+        out["watch_poll_s"] = WATCH_DEFAULTS["watch_poll_s"]
+    return out
 
 
 # ---------------------------------------------------------------- 任务报告
