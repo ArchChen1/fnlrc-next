@@ -22,11 +22,14 @@ const STRINGS = {
   "topbar.report": "报告 ⤓",
   "topbar.settings": "设置 ⚙",
   "topbar.history": "历史",
-  "nav.pick": "选择音乐库",
-  "nav.summary": "扫描概览",
-  "nav.preview": "补完预览",
-  "nav.running": "执行中",
-  "nav.report": "报告",
+  "tab.pick": "选库",
+  "tab.summary": "概览",
+  "tab.preview": "补完",
+  "tab.progress": "进度",
+  "tab.report": "报告",
+  "tab.locked_scan": "先选库并扫描一次，才有概览和补完",
+  "tab.locked_run": "还没有跑过任务，先点「补完」里的开始",
+  "tab.locked_report": "还没有报告，先跑一次补完",
   "step.of": "Step {i} / {n}",
 
   // ── 状态（与后端同名）──────────────────────────────────
@@ -76,7 +79,6 @@ const STRINGS = {
   "pick.scan": "扫描音乐库",
   "pick.scanning": "扫描中…",
   "pick.hint": "支持本地文件夹、SMB 共享、映射盘符；网页版填挂载进容器的路径。",
-  "pick.scroll": "向下滚动",
   "pick.need_root": "先填一个音乐库路径",
   "pick.scan_failed": "扫描失败：{err}",
 
@@ -117,7 +119,7 @@ const STRINGS = {
   // ── ④ 执行 ────────────────────────────────────────────
   "run.title": "执行中",
   "run.waiting": "等待开始",
-  "run.idle": "还没有开始。回到上一屏点「开始补完」。",
+  "run.idle": "还没有开始。去「补完」标签点「开始补完」。",
   "run.stop": "停止",
   "run.stopping": "正在停止…",
   "run.stopped": "已停止",

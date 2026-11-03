@@ -22,11 +22,14 @@ const STRINGS = {
   "topbar.report": "Report ⤓",
   "topbar.settings": "Settings ⚙",
   "topbar.history": "History",
-  "nav.pick": "Choose library",
-  "nav.summary": "Scan overview",
-  "nav.preview": "Preview",
-  "nav.running": "Running",
-  "nav.report": "Report",
+  "tab.pick": "Library",
+  "tab.summary": "Overview",
+  "tab.preview": "Fix",
+  "tab.progress": "Progress",
+  "tab.report": "Report",
+  "tab.locked_scan": "Pick a library and scan it first",
+  "tab.locked_run": "No job yet — start one on the Fix tab",
+  "tab.locked_report": "No report yet — run a pass first",
   "step.of": "Step {i} / {n}",
 
   // ── status (same names as backend) ────────────────────
@@ -76,7 +79,6 @@ const STRINGS = {
   "pick.scan": "Scan library",
   "pick.scanning": "Scanning…",
   "pick.hint": "Local folders, SMB shares and mapped drives all work; in the web version use the path mounted into the container.",
-  "pick.scroll": "Scroll down",
   "pick.need_root": "Enter a library path first",
   "pick.scan_failed": "Scan failed: {err}",
 
@@ -117,7 +119,7 @@ const STRINGS = {
   // ── ④ running ─────────────────────────────────────────
   "run.title": "Running",
   "run.waiting": "Waiting to start",
-  "run.idle": "Not started yet. Go back one screen and hit \"Start\".",
+  "run.idle": "Not started yet. Go to the Fix tab and hit \"Start\".",
   "run.stop": "Stop",
   "run.stopping": "Stopping…",
   "run.stopped": "Stopped",

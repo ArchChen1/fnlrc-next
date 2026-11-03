@@ -15,31 +15,31 @@
 </head>
 <body>
 
-<div class="topbar">
+<div class="app">
+
+<header class="topbar">
   <div class="brand">fnlrc <em data-i18n="app.brand">飞牛歌词补完器</em></div>
+  <nav class="tabs tabs--top" role="tablist" aria-label="页面导航">
+    <button class="tab" role="tab" data-tab="0" data-i18n="tab.pick">选库</button>
+    <button class="tab" role="tab" data-tab="1" data-i18n="tab.summary">概览</button>
+    <button class="tab" role="tab" data-tab="2" data-i18n="tab.preview">补完</button>
+    <button class="tab" role="tab" data-tab="3" data-i18n="tab.progress">进度</button>
+    <button class="tab" role="tab" data-tab="4" data-i18n="tab.report">报告</button>
+  </nav>
   <div class="row">
     <button class="btn-ghost" id="jumpReport" type="button" data-i18n="topbar.report">报告 ⤓</button>
     <button class="btn-ghost" id="openSettings" type="button" data-i18n="topbar.settings">设置 ⚙</button>
     <button class="btn-ghost" id="openHistory" type="button" data-i18n="topbar.history">历史</button>
   </div>
-</div>
+</header>
 
-<nav class="dots" aria-label="页面导航">
-  <button class="dot" data-i="0" data-i18n-aria="nav.pick" aria-label="选择音乐库"></button>
-  <button class="dot" data-i="1" data-i18n-aria="nav.summary" aria-label="扫描概览"></button>
-  <button class="dot" data-i="2" data-i18n-aria="nav.preview" aria-label="补完预览"></button>
-  <button class="dot" data-i="3" data-i18n-aria="nav.running" aria-label="执行中"></button>
-  <button class="dot" data-i="4" data-i18n-aria="nav.report" aria-label="报告"></button>
-</nav>
-
-<main class="track" id="track">
+<main class="panels" id="panels">
 
   <!-- ① 选择音乐库 -->
-  <section class="scene" id="scene0">
+  <section class="panel" id="panel0" role="tabpanel" data-i18n-aria="tab.pick">
     <div class="glow indigo"></div>
     <div class="stage">
-      <p class="eyebrow rv d0">Step 1 / 5</p>
-      <h1 class="hero rv d75" data-i18n-html="pick.hero">让每一首歌<br>都有译文</h1>
+      <h1 class="hero rv d0" data-i18n-html="pick.hero">让每一首歌<br>都有译文</h1>
       <p class="body rv d150" style="margin-top:1.5rem;max-width:38rem" data-i18n-html="pick.body">
         把「只有原语言、单行显示、刮错、乱码、干脆没歌词」变成
         <strong style="color:#fff;font-weight:600">原文 + 译文双行</strong>。
@@ -61,15 +61,13 @@
         </p>
       </div>
     </div>
-    <div class="hint"><span data-i18n="pick.scroll">向下滚动</span><i class="chev"></i></div>
   </section>
 
   <!-- ② 扫描概览 -->
-  <section class="scene" id="scene1">
+  <section class="panel" id="panel1" role="tabpanel" data-i18n-aria="tab.summary" hidden>
     <div class="glow cyan"></div>
     <div class="stage">
-      <p class="eyebrow rv d0">Step 2 / 5</p>
-      <h2 class="h1 rv d75" style="margin-top:.6rem" data-i18n="summary.title">扫描概览</h2>
+      <h2 class="h1 rv d0" data-i18n="summary.title">扫描概览</h2>
 
       <div class="grid g4 rv d150" style="margin-top:2rem" id="stats"></div>
 
@@ -95,11 +93,10 @@
   </section>
 
   <!-- ③ 补完预览 -->
-  <section class="scene" id="scene2">
+  <section class="panel" id="panel2" role="tabpanel" data-i18n-aria="tab.preview" hidden>
     <div class="glow emerald"></div>
     <div class="stage">
-      <p class="eyebrow rv d0">Step 3 / 5</p>
-      <h2 class="h1 rv d75" style="margin-top:.6rem" data-i18n="preview.title">补完预览</h2>
+      <h2 class="h1 rv d0" data-i18n="preview.title">补完预览</h2>
 
       <div class="grid g2 rv d150" style="margin-top:1.2rem;align-items:start">
         <div>
@@ -143,11 +140,10 @@
   </section>
 
   <!-- ④ 执行中 -->
-  <section class="scene" id="scene3">
+  <section class="panel" id="panel3" role="tabpanel" data-i18n-aria="tab.progress" hidden>
     <div class="glow amber"></div>
     <div class="stage">
-      <p class="eyebrow rv d0">Step 4 / 5</p>
-      <h2 class="h1 rv d75" style="margin-top:.6rem" data-i18n="run.title">执行中</h2>
+      <h2 class="h1 rv d0" data-i18n="run.title">执行中</h2>
 
       <div class="row rv d150" style="margin-top:1.5rem;justify-content:space-between">
         <span class="mono" id="progText" data-i18n="run.waiting">等待开始</span>
@@ -169,11 +165,10 @@
   </section>
 
   <!-- ⑤ 报告 -->
-  <section class="scene" id="scene4">
+  <section class="panel" id="panel4" role="tabpanel" data-i18n-aria="tab.report" hidden>
     <div class="glow rose"></div>
     <div class="stage">
-      <p class="eyebrow rv d0">Step 5 / 5</p>
-      <h2 class="h1 rv d75" style="margin-top:.6rem" id="reportTitle" data-i18n="report.title">报告</h2>
+      <h2 class="h1 rv d0" id="reportTitle" data-i18n="report.title">报告</h2>
       <p class="body rv d150" style="margin-top:.8rem" id="reportSummary"></p>
 
       <div class="row rv d225" style="margin-top:1.5rem" id="filterTabs"></div>
@@ -205,7 +200,18 @@
 
 </main>
 
-<!-- 设置面板（覆盖式，不参与 5 屏叙事） -->
+<!-- 手机：底部 Tab 栏（拇指区，纯文字 5 项等分） -->
+<nav class="tabs tabs--bottom" role="tablist" aria-label="页面导航">
+  <button class="tab" role="tab" data-tab="0" data-i18n="tab.pick">选库</button>
+  <button class="tab" role="tab" data-tab="1" data-i18n="tab.summary">概览</button>
+  <button class="tab" role="tab" data-tab="2" data-i18n="tab.preview">补完</button>
+  <button class="tab" role="tab" data-tab="3" data-i18n="tab.progress">进度</button>
+  <button class="tab" role="tab" data-tab="4" data-i18n="tab.report">报告</button>
+</nav>
+
+</div>
+
+<!-- 设置面板（覆盖式，不参与 Tab 叙事） -->
 <div class="overlay" id="settings">
   <div class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
     <div class="row" style="justify-content:space-between">

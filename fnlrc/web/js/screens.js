@@ -1,6 +1,7 @@
 /**
- * 五个场景屏：选库 → 扫描 → 预览 → 执行 → 报告。
- * 对应 skill 的「一屏一事」，也对应 UI-SPEC 的五步。
+ * 五个 Tab 面板：选库 → 扫描 → 预览 → 执行 → 报告。
+ * M5 起从「5 屏整屏吸附」改成「单页 + Tab」，业务渲染逻辑保持不变，
+ * 只换了外壳（容器与跳转方式）。
  */
 import { S, ACTION_LABEL, STATUS_LABEL, backends, filters, GROUP, tone } from "./state.js";
 import { $, $$, esc, api, toast, fmtTime } from "./core.js";
@@ -8,60 +9,98 @@ import { t } from "./i18n/index.js";
 import { openFsBrowser } from "./fsbrowser.js";
 import { openManual, canEdit } from "./manual.js";
 
-const track = () => $("#track");
+const TAB_KEY = "fnlrc_tab";
+const TAB_COUNT = 5;
 
-/* ─────────────────────────────────────────── 场景切换 */
+/* ─────────────────────────────────────────── Tab 切换 */
 
-export function initSnap() {
-  S.scenes = $$(".scene");
-  const trk = track();
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-      if (e.isIntersecting && e.intersectionRatio > 0.5) {
-        const i = S.scenes.indexOf(e.target);
-        $$(".dot").forEach((d, j) => d.setAttribute("aria-current", String(i === j)));
-      }
-    });
-  }, { root: trk, threshold: [0.5] });
-  S.scenes.forEach(s => obs.observe(s));
-  $$(".dot").forEach(d => d.addEventListener("click", () => go(+d.dataset.i)));
+/**
+ * Tab 何时可用（见 M5 设计 §3.4）。返回锁定原因文案键，空串表示可用。
+ * 刻意**不禁用**按钮：`data-locked` + CSS 置灰，点了给一句提示，
+ * 让用户能先看到后面长什么样，而不是面对一排点不动的灰块。
+ */
+function lockReason(i) {
+  if (i >= 1 && i <= 2 && !S.summary) return "tab.locked_scan";
+  if (i === 3 && !S.jobId && !S.results.length) return "tab.locked_run";
+  if (i === 4 && !S.results.length && !S.jobId) return "tab.locked_report";
+  return "";
+}
 
-  // 键盘可达：面板打开时不抢键
+/** 重新计算并刷新所有 Tab 的锁定态。扫描完 / 跑完任务后各调一次。 */
+export function syncTabLocks() {
+  $$(".tab").forEach(el => {
+    const i = +el.dataset.tab;
+    const locked = !!lockReason(i);
+    if (locked) el.dataset.locked = "true";
+    else delete el.dataset.locked;
+  });
+}
+
+export function initTabs() {
+  const tabs = $$(".tab");
+
+  tabs.forEach(el => el.addEventListener("click", () => {
+    const i = +el.dataset.tab;
+    const why = lockReason(i);
+    if (why) { toast(t(why)); return; }
+    go(i);
+  }));
+
+  // 键盘：左右箭头切 Tab；面板/弹层打开时不抢键
   addEventListener("keydown", e => {
     if ($(".overlay.open")) return;
-    const cur = currentScene();
-    if (e.key === "ArrowDown" || e.key === "PageDown") {
-      e.preventDefault(); go(Math.min(cur + 1, S.scenes.length - 1));
-    } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-      e.preventDefault(); go(Math.max(cur - 1, 0));
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.key === "ArrowRight") {
+      e.preventDefault(); go(Math.min(currentTab() + 1, TAB_COUNT - 1));
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault(); go(Math.max(currentTab() - 1, 0));
     }
   });
+
+  // 刷新后回到上次所在 Tab（锁定态则退回第一个并告知原因）
+  let saved = 0;
+  try { saved = parseInt(localStorage.getItem(TAB_KEY), 10); } catch (e) { /* 隐私模式 */ }
+  const lost = Number.isInteger(saved) && saved > 0 && saved < TAB_COUNT && lockReason(saved);
+  if (!Number.isInteger(saved) || saved < 0 || saved >= TAB_COUNT || lost) saved = 0;
+
+  syncTabLocks();
+  go(saved);
+  // 扫描 / 任务结果不落浏览器，刷新后这类 Tab 会变空 —— 直说，别让用户疑惑
+  if (lost) toast(t(lost));
+}
+
+export function currentTab() {
+  return S.tab || 0;
 }
 
 /**
- * 用相对位移计算目标位置，而不是 `i × 视口高`。
- * 后者只在「每屏恰好一个视口高」时成立 —— 一旦某屏因为内容多而变高，
- * 后面所有屏的位移就全错位了（实测踩过）。
+ * 用户主动要某个 Tab（顶栏按钮、其他模块调用）：锁定就提示原因，不硬跳。
+ * 与 `go()` 的区别：`go()` 是程序内部跳转（扫描完成后自动进概览等），不走锁。
  */
-function sceneOffset(trk, scene) {
-  return trk.scrollTop + (scene.getBoundingClientRect().top - trk.getBoundingClientRect().top);
+export function requestTab(i) {
+  const why = lockReason(i);
+  if (why) { toast(t(why)); return; }
+  go(i);
 }
 
+/**
+ * 切到第 i 个面板。隐藏其余、同步 aria-selected、记住选择。
+ * 与旧版 `go(i)` 的区别：不再滚动整屏，只是显隐面板 —— 页面滚动位置回到顶部
+ * （否则从一个长面板切到短面板会停在半空）。
+ */
 export function go(i) {
-  const trk = track();
-  const scene = S.scenes[i];
-  if (!scene) return;
-  trk.scrollTo({ top: sceneOffset(trk, scene), behavior: "smooth" });
-}
+  if (i < 0 || i >= TAB_COUNT) return;
+  S.tab = i;
 
-function currentScene() {
-  const trk = track();
-  let best = 0, bestDist = Infinity;
-  S.scenes.forEach((s, i) => {
-    const d = Math.abs(sceneOffset(trk, s) - trk.scrollTop);
-    if (d < bestDist) { bestDist = d; best = i; }
+  $$(".panel").forEach((p, j) => { p.hidden = j !== i; });
+  $$(".tab").forEach(tab => {
+    tab.setAttribute("aria-selected", String(+tab.dataset.tab === i));
+    tab.tabIndex = +tab.dataset.tab === i ? 0 : -1;
   });
-  return best;
+
+  const panel = $("#panel" + i);
+  if (panel) panel.scrollIntoView({ block: "start" });
+  try { localStorage.setItem(TAB_KEY, String(i)); } catch (e) { /* 忽略 */ }
 }
 
 /* ─────────────────────────────────────────── ① 选库 */
@@ -112,6 +151,7 @@ export function adoptScanned(root, summary) {
   const input = $("#root");
   if (input) input.value = root;
   renderSummary(summary, root);
+  syncTabLocks();          // 扫描完成后「概览 / 补完」解锁
 }
 
 export function renderSummary(s, root) {
@@ -226,6 +266,7 @@ async function doRun() {
     S.results = [];
     setProgress(0, d.total, "run.started");
     $("#doStop").disabled = false;
+    syncTabLocks();        // 任务开跑后「进度」解锁
     go(3);
     streamJob(d.job_id, d.total);
   } catch (e) {
@@ -372,6 +413,7 @@ export function finishReport() {
   renderReportSummary();
   renderFilters();
   renderReport();
+  syncTabLocks();          // 有报告了，「报告」解锁
   setProgress(S.results.length, S.results.length, "common.done");
   go(4);
 }

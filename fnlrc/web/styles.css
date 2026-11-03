@@ -1,7 +1,8 @@
 /* ==========================================================================
    fnlrc · 样式
-   设计风格：full-page-scroll（StyleKit）
-     · 每一屏占满视口、scroll-snap 强制吸附、一屏一事
+   设计风格：single-page-tabs（StyleKit）
+     · 单页 + 多个 Tab 面板，页面自然滚动、不做整屏吸附
+     · 桌面顶部 Tab 条 / 手机底部固定 Tab 栏（拇指区）
      · 纯黑底 + 白字 + 白/透明描边 + rounded-full + 渐变卡片
      · 层次一律靠色块与渐变，全站不用任何盒阴影
      · 内容层错落（d0 / d75 / d150），背景 hover 时放大
@@ -40,28 +41,31 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg-primary);color:var(--text);
      font-family:var(--sans);-webkit-font-smoothing:antialiased}
 
-/* ── 场景轨：唯一的滚动容器，强制整屏吸附 ───────────────────────── */
-.track{height:100dvh;overflow-y:auto;overflow-x:hidden;
-       scroll-snap-type:y mandatory;scroll-behavior:smooth}
+/* ── 单页 Tab 布局 ──────────────────────────────────────── */
+/* .app 只管纵向排布：顶栏 + 面板 + （手机）底部栏。页面本身自然滚动。 */
+.app{display:flex;flex-direction:column;min-height:100dvh}
+
 /*
-  每一屏都**恰好**一个视口高 —— 这是吸附几何的前提：只有各屏等高，
-  「第 i 屏的位移 = i × 视口高」才成立，导航点与键盘跳转才不会跳错。
-  实测踩过：用 min-height 时内容多的一屏会长到 820px（视口 635px），
-  后续所有屏的位移全部错位。
-
-  height:100dvh + overflow:hidden 之后，内容真的塞不下时由 .stage 内部滚动兜底，
-  宁可让一屏内部可滚，也不要让整条轨的几何被撑坏。内容尺寸仍需控制在单屏内。
+  面板不再等于视口高 —— 按内容自然高度，外层页面正常滚动。
+  这就是本次改版的核心：去掉 100dvh + scroll-snap 的几何硬约束，
+  表格 / 日志数据变多时页面自己变长，不再被迫塞进内部小滚动条。
 */
-.scene{position:relative;height:100dvh;min-height:100dvh;scroll-snap-align:start;
-       display:flex;align-items:center;justify-content:center;
-       padding:4.5rem 1.5rem 2.5rem;overflow:hidden}
-@media(min-width:768px){.scene{padding:4.5rem 2rem 2.5rem}}
-@media(min-width:1024px){.scene{padding:4.5rem 3rem 2.5rem}}
+.panels{flex:1 1 auto;display:block}
+.panel{position:relative;display:flex;justify-content:center;
+       padding:2.5rem 1.5rem 3rem;min-height:calc(100dvh - 4.5rem);
+       /* 背景 .glow 故意超出面板边界（inset:-20%），必须在面板这层裁掉，
+          否则手机窄屏会多出一条横向滚动条 */
+       overflow-x:clip;
+       /* 切 Tab 时对齐到面板顶部；留出吸顶栏的高度，别被它盖住 */
+       scroll-margin-top:4.5rem}
+.panel[hidden]{display:none}
+@media(min-width:768px){.panel{padding:3rem 2rem 4rem}}
+@media(min-width:1024px){.panel{padding:3.5rem 3rem 4rem}}
 
-/* 背景径向渐变：hover 时 scale-110（"呼吸感"） */
+/* 背景径向渐变：作为每个面板的顶部背景，不再依赖 hover 呼吸 */
 .glow{position:absolute;inset:-20%;z-index:0;pointer-events:none;opacity:.5;
       transition:transform .7s var(--ease)}
-.scene:hover .glow{transform:scale(1.1)}
+.panel:hover .glow{transform:scale(1.06)}
 .glow.indigo{background:radial-gradient(60% 50% at 50% 40%,rgba(79,70,229,.45),transparent 70%)}
 .glow.cyan{background:radial-gradient(60% 50% at 50% 40%,rgba(8,145,178,.4),transparent 70%)}
 .glow.emerald{background:radial-gradient(60% 50% at 50% 40%,rgba(5,150,105,.4),transparent 70%)}
@@ -75,9 +79,10 @@ body{margin:0;background:var(--bg-primary);color:var(--text);
   极端情况（固定部分就已超屏）由 stage 自身的滚动兜底。
 */
 .stage{position:relative;z-index:1;width:100%;max-width:64rem;margin:0 auto;
-       max-height:100%;display:flex;flex-direction:column;overflow-y:auto;
-       overscroll-behavior:contain}
-.stage > .scroller,.stage > .log{flex:1 1 auto;min-height:3.5rem;max-height:none}
+       display:flex;flex-direction:column}
+/* 窄屏下长内容不撑破容器（路径 / 长文件名 / 表格） */
+.stage>*{min-width:0}
+.stage .body{overflow-wrap:anywhere}
 
 /* 内容层错落（skill：不能所有元素同 delay，否则没有景深） */
 .rv{animation:rise .7s var(--ease) both}
@@ -153,8 +158,8 @@ label.checkline{gap:.55rem;margin-bottom:.9rem;font-size:.9375rem;cursor:pointer
 .pill.dim{color:rgba(255,255,255,.55)}
 .pill:hover{border-color:#fff}
 
-/* 表格：section 本身不溢出，长内容在内部滚动容器里 */
-.scroller{max-height:32vh;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
+/* 表格：桌面在内部滚动容器里限量；手机改整页滚动（见 <768px 断点） */
+.scroller{max-height:34rem;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
           overscroll-behavior:contain}
 table{width:100%;border-collapse:collapse;font-size:.875rem}
 th{position:sticky;top:0;z-index:2;background:#000;text-align:left;font-weight:600;
@@ -185,32 +190,54 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .log .ok{color:var(--ok)}.log .warn{color:var(--warn)}
 .log .bad{color:var(--bad)}.log .dim{color:rgba(255,255,255,.45)}
 
-/* ── 顶栏 / 导航点 / 滚动提示 ───────────────────────────────── */
-.topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
-        justify-content:space-between;gap:1rem;padding:1.1rem 1.5rem;
-        background:linear-gradient(to bottom,rgba(0,0,0,.92),transparent)}
-@media(min-width:768px){.topbar{padding:1.25rem 3rem}}
-.brand{font-weight:700;letter-spacing:-.01em;font-size:1rem}
+/* ── 顶栏 / Tab 条 ───────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;
+        justify-content:space-between;gap:1rem;padding:1rem 1.5rem;
+        background:rgba(0,0,0,.88);backdrop-filter:blur(12px);
+        border-bottom:1px solid var(--line-soft)}
+@media(min-width:768px){.topbar{padding:1.1rem 3rem}}
+.brand{font-weight:700;letter-spacing:-.01em;font-size:1rem;white-space:nowrap}
 .brand em{font-style:normal;color:rgba(255,255,255,.45);font-weight:400;
           margin-left:.6rem;font-size:.8125rem}
 
-/* hover 时从圆变胶囊（skill 明确要求 hover:h-6） */
-.dots{position:fixed;right:1.5rem;top:50%;transform:translateY(-50%);z-index:40;
-      display:flex;flex-direction:column;gap:.7rem;align-items:center}
-.dot{width:9px;height:9px;border-radius:var(--radius-full);background:rgba(255,255,255,.3);
-     border:0;padding:0;cursor:pointer;transition:all .3s var(--ease)}
-.dot:hover{height:1.5rem;background:#fff}
-.dot[aria-current="true"]{background:#fff;height:1.5rem}
-.dot:focus-visible{outline:2px solid #fff;outline-offset:3px}
+/* 桌面：顶栏中间的横排 Tab 条；手机隐藏（改用底部栏） */
+.tabs{display:flex;align-items:center;gap:.25rem}
+.tabs--top{flex:1 1 auto;justify-content:center}
+.tab{appearance:none;border:0;background:transparent;cursor:pointer;font:inherit;
+     font-size:.875rem;font-weight:600;color:rgba(255,255,255,.55);
+     padding:.55rem 1rem;border-radius:var(--radius-full);white-space:nowrap;
+     transition:background-color .2s,color .2s}
+.tab:hover{color:#fff;background:rgba(255,255,255,.1)}
+.tab[aria-selected="true"]{background:#fff;color:#000}
+.tab:focus-visible{outline:2px solid #fff;outline-offset:3px}
+/* 锁定态：可点但置灰（点了给提示，让用户能预览流程） */
+.tab[data-locked="true"]{color:rgba(255,255,255,.3)}
+.tab[data-locked="true"][aria-selected="true"]{background:rgba(255,255,255,.35);color:#000}
 
-.hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:1;
-      display:flex;flex-direction:column;align-items:center;gap:.5rem;
-      color:rgba(255,255,255,.5);font-size:.75rem;letter-spacing:.16em;text-transform:uppercase}
-.chev{width:11px;height:11px;border-right:2px solid rgba(255,255,255,.6);
-      border-bottom:2px solid rgba(255,255,255,.6);transform:rotate(45deg);
-      animation:bob 1.8s ease-in-out infinite}
-@keyframes bob{0%,100%{transform:rotate(45deg) translate(0,0);opacity:.45}
-               50%{transform:rotate(45deg) translate(4px,4px);opacity:1}}
+/* 手机底部栏默认不存在；<768px 才显示 */
+.tabs--bottom{display:none}
+
+@media(max-width:767px){
+  .tabs--top{display:none}
+  .tabs--bottom{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    justify-content:space-around;gap:0;
+    background:rgba(0,0,0,.96);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);
+    padding:0 0 env(safe-area-inset-bottom) 0;
+  }
+  .tabs--bottom .tab{flex:1 1 0;min-height:52px;padding:.9rem .15rem;
+    border-radius:0;font-size:.8125rem;color:rgba(255,255,255,.5);
+    position:relative;background:transparent}
+  .tabs--bottom .tab[aria-selected="true"]{background:transparent;color:#fff}
+  /* 当前项顶部指示条 */
+  .tabs--bottom .tab[aria-selected="true"]::before{content:"";position:absolute;
+    left:22%;right:22%;top:0;height:2px;background:#fff;border-radius:0 0 2px 2px}
+  .tabs--bottom .tab[data-locked="true"]{color:rgba(255,255,255,.28)}
+  .tabs--bottom .tab[data-locked="true"][aria-selected="true"]{color:rgba(255,255,255,.55)}
+  /* 底栏不遮挡内容 */
+  .panels{padding-bottom:calc(3.5rem + env(safe-area-inset-bottom))}
+}
 
 /* ── 覆盖式面板（设置 / 历史 / 令牌闸门）────────────────────── */
 .overlay{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
@@ -238,7 +265,9 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .toast{position:fixed;left:50%;bottom:2rem;transform:translate(-50%,150%);z-index:80;
        background:#fff;color:#000;font-size:.875rem;font-weight:600;
        padding:.75rem 1.4rem;border-radius:var(--radius-full);
-       transition:transform .35s var(--ease);max-width:min(90vw,34rem)}
+       transition:transform .35s var(--ease);max-width:min(90vw,34rem);
+       /* 纯提示，不该拦住任何点击（手机上它会盖住底部 Tab 栏） */
+       pointer-events:none}
 .toast.show{transform:translate(-50%,0)}
 
 /* 动态插入的目录列表行 */
@@ -270,4 +299,47 @@ input.mtran::placeholder{color:rgba(255,255,255,.35)}
 @media(max-width:640px){
   .mline{grid-template-columns:3.5rem 1fr;gap:.35rem .6rem}
   .mline .mtran{grid-column:1 / -1}
+}
+
+/* ==========================================================================
+   手机竖屏（M5）：触控目标与滚动的最后一道兜底
+   放在文件末尾，才能盖过前面各处的基础规则。
+   ========================================================================== */
+@media(max-width:767px){
+  /* 内容永不横向溢出：长路径 / 长歌名一律换行 */
+  body{overflow-x:hidden}
+  .stage{width:100%}
+  .stage table{word-break:break-word}
+
+  /* 不再有「滚动套滚动」：表格 / 日志 / 目录列表 / 翻译列表都交给整页滚动 */
+  .scroller,.log,.dirlist,.mlist{
+    max-height:none !important;overflow:visible !important;overscroll-behavior:auto}
+
+  /* 触控目标 ≥ 44×44px */
+  .btn{min-height:44px;padding:.75rem 1.35rem}
+  .btn-lg{min-height:48px}
+  .btn-ghost{min-height:44px;padding:.55rem .75rem}
+  .tab{min-height:44px}
+  label.checkline{min-height:44px;align-items:center}
+  input[type=text],input[type=password],select,input[type=number]{
+    min-height:44px;font-size:16px}   /* 16px 防止 iOS 聚焦时自动放大 */
+
+  /* 顶栏在手机上只留品牌与动作按钮 */
+  .topbar{padding:.75rem 1rem}
+  .topbar .brand em{display:none}
+  .panel{padding:1.5rem 1rem 2rem;min-height:0}
+  .panel .h1,.panel .hero{font-size:clamp(1.5rem,7vw,2.25rem)}
+  .card{padding:1.35rem}
+  .stat{padding:.9rem .6rem}
+
+  /* 提示条抬高到底部 Tab 栏之上 */
+  .toast{bottom:calc(4.5rem + env(safe-area-inset-bottom))}
+}
+
+/* 触屏设备（含 iPad 这类宽屏平板）：按桌面布局，但触控目标同样放大到 44px */
+@media(pointer:coarse){
+  .btn{min-height:44px}
+  .btn-ghost{min-height:44px;padding:.55rem .8rem}
+  .tab{min-height:44px}
+  label.checkline{min-height:44px;align-items:center}
 }

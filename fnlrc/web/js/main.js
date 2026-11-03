@@ -9,7 +9,7 @@
 import { S } from "./state.js";
 import { $ } from "./core.js";
 import { t } from "./i18n/index.js";
-import { initSnap, initPick, initPreview, initReport, go,
+import { initTabs, initPick, initPreview, initReport, requestTab,
          renderBackends, renderSummary, renderReport, renderFilters,
          bumpStats, renderLog, renderReportSummary, renderProgress } from "./screens.js";
 import { initPanels, initLang, setLangChangeHook } from "./panels.js";
@@ -41,7 +41,7 @@ function rerender() {
 function boot() {
   initLang();          // ① 语言优先，后面所有渲染都依赖它
 
-  initSnap();
+  initTabs();          // ② Tab 先装：恢复上次所在面板、接键盘与点击
   initPick();
   initPreview();
   initReport();
@@ -53,7 +53,8 @@ function boot() {
   // 首次使用走引导（欢迎 → 令牌 → 选库）；已有配置则回落到原来的令牌闸门
   initWizard();
 
-  $("#jumpReport").addEventListener("click", () => go(4));
+  // 顶栏「报告 ⤓」：与点 Tab 同一条路径，没报告就提示先跑
+  $("#jumpReport").addEventListener("click", () => requestTab(4));
 }
 
 if (document.readyState === "loading") {

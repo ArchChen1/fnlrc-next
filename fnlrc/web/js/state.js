@@ -66,5 +66,6 @@ export const S = {
   config: {},
   watchRunning: false,
   filter: "all",
-  scenes: []
+  /** 当前 Tab 序号（0..4），M5 起代替原来的 scenes */
+  tab: 0
 };

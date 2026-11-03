@@ -334,6 +334,26 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 
 **可选依赖降级**：`mutagen`（标签）缺失 → 退回文件名解析；`pywebview` 缺失 → 退回浏览器模式；`fastapi`/`uvicorn` 缺失 → 只能 Web/CLI 之前的核心逻辑（`pipeline` 本身不依赖它们）。
 
+### 前端结构（M5 起：单页 + 五个 Tab）
+
+```
+index.html
+└── div.app
+    ├── header.topbar     品牌 + nav.tabs--top（桌面可见）+ 报告/设置/历史
+    ├── main.panels       5 × section.panel#panel0..4，[hidden] 切换，页面自然滚动
+    └── nav.tabs--bottom  同一组 data-tab，仅 <768px 显示，固定屏幕底部
+```
+
+- **只有一套 Tab 逻辑**：顶部与底部是两个容器、共享 `data-tab`，由 CSS 决定显隐。
+- `screens.js` 的 `initTabs()` 接点击与键盘（← →），`go(i)` 只做「显隐面板 +
+  同步 `aria-selected` + 记住 `fnlrc_tab`」；`requestTab(i)` 是用户主动跳转（走锁定检查）。
+- Tab 锁定用 `data-locked="true"` + CSS 置灰，**不 disable** ——
+  点了给 toast 提示缺哪一步，用户可以先预览后面的流程。
+- **全部元素 id 保持原样**（`#root` / `#doScan` / `#stats` / `#filterTabs` …），
+  各模块的 `$("#id")` 一行没改，回归面最小。
+- 手机断点（<768px）：底部 Tab 固定、`.panels` 预留 `padding-bottom`、
+  取消表格/日志的内部滚动、触控目标 ≥44px。
+
 ### 界面语言（M4）
 
 三端共用同一份词表结构，**每语言一个文件**：
