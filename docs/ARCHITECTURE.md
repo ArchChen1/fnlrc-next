@@ -62,7 +62,7 @@ fnlrc/
 | `providers/` | 外部世界的边界：**歌词源**（网易云、LRCLIB、社区插件）经 `Provider` 协议产出 `pairs`；`fetch_lyrics` 按 priority 串行降级；远端翻译后端（DeepSeek）、匹配打分与**译文对齐** | 决策（要不要翻、要不要写） |
 | `pipeline.py` | **决策与编排**：调 `fetch_lyrics` 选源 → 校验 → 译文对齐/翻译降级 → 重试 → 写/不写 → 结果 | IO 细节、UI、具体某个源 |
 | `manual.py` | **人工翻译**：`collect` 收集缺译文行 → `export`/`parse` 的 CSV/JSON 往返 → `merge` 校验并按**原时间戳**合成 → 记忆库（默认关） | 联网抓词（那是 providers）、要不要写库（由 CLI/HTTP 决定） |
-| `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重 | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
+| `watcher.py` | **监听文件夹**：轮询目录、判定"写完了沒"、调 `pipeline.process_song`、搬运已处理的文件、状态落盘去重、事件日志落盘保留（`WatchLog`） | 决策逻辑（复用 pipeline）、文件系统事件（纯轮询，见 ADR-019） |
 | `fnos.py` | 飞牛数据库的只读探测、差异计划、原地回填（已有歌词）与**补建歌词行**（没有歌词的歌，要 `--allow-insert`） | 歌词的获取与翻译（它只负责"把已生成的 `.lrc` 搬进飞牛"） |
 | `store.py` | 任务与结果的持久化、配置与令牌、回滚 | 业务逻辑 |
 | `i18n/` | **界面文案**：键查询 `t()`、语言切换、优先级探测（`--lang` > `FNLRC_LANG` > config > 系统）；缺译为英文、再缺为键名 | 业务逻辑；**数据不翻译**（`status` 等仍是英文枚举，见 ADR-022） |
@@ -245,6 +245,8 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 | `POST` | `/api/watch/start` | 按**已保存的** watch 配置启动监听线程（请求体被忽略）；校验目录存在、搬运目标存在、不同目录 | ✅ |
 | `POST` | `/api/watch/stop` | 停止监听线程（当前这首处理完即停） | ✅ |
 | `GET` | `/api/watch/events` | **SSE** 监听事件流（`{type:"watch",event,file,rel,result}`；令牌走查询串） | — |
+| `GET` | `/api/watch/log` | 读回落的监听日志（`{events:[{ts,event,status,name,note,…}],count,hours}`）；关掉面板/重启后可回看 | — |
+| `POST` | `/api/watch/log/clear` | 清空监听日志 | ✅ |
 | `GET` | `/api/probe/ollama` | 410 Gone —— 本地模型后端已移除，保留此路由只为给旧前端一个明确的答复 | — |
 
 `/api/run` 的 `keep_local` 省略时**跟随服务端配置**（默认开）。这样网页版的勾选框
@@ -299,6 +301,10 @@ class Config:                   # 一次任务的配置（pipeline.Config）
 `event` 只有 `processing` 与 `done` 两种；`done` 事件的 `result` 就是 `process_song`
 的返回（含 `trigger:"watch"` 与 `path`，见报告）。期间服务端每 15 秒发一个
 `: keep-alive` 注释行保活。
+
+同一条事件除了走 SSE，还会被 `watcher.WatchLog` 落盘到 `$FNLRC_DATA/watch-log.jsonl`：
+**默认保留 48 小时**（`watch_log_hours`，`<=0` 表示不保存），按时间戳滚动裁剪，
+`GET /api/watch/log` 读回最近若干条。CLI 的 `fnlrc watch` 与服务端共用同一份文件。
 
 ### 任务与并发
 

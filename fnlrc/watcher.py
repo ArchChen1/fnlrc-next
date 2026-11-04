@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -54,6 +55,147 @@ MAX_RETRY = len(RETRY_DELAYS)
 def state_path() -> Path:
     """重试 / 去重状态的落盘位置（A3：重启不重跑）。"""
     return store.data_dir() / "watch-state.json"
+
+
+def log_path() -> Path:
+    """监听事件日志的落盘位置（JSONL，一行一个事件）。"""
+    return store.data_dir() / "watch-log.jsonl"
+
+
+DEFAULT_LOG_HOURS = 48
+
+
+def log_retention_hours(cfg: dict | None = None) -> float:
+    """监听日志保留时长（小时）。默认 48；小于等于 0 表示不保留（只在面板里看实时流）。"""
+    cfg = cfg if cfg is not None else store.load_config()
+    try:
+        v = float(cfg.get("watch_log_hours", DEFAULT_LOG_HOURS))
+    except (TypeError, ValueError):
+        return float(DEFAULT_LOG_HOURS)
+    return v
+
+
+def _log_line(ev: dict) -> str:
+    """把一条 SSE 事件整理成一条可读的日志记录（保留原始字段便于回放）。"""
+    result = ev.get("result") or {}
+    name = ev.get("rel") or result.get("file") or os.path.basename(ev.get("file") or "")
+    note = result.get("note") or ""
+    kind = ev.get("event") or ""
+    status = result.get("status") or ""
+    return json.dumps({"ts": time.time(), "event": kind, "status": status,
+                       "name": name, "note": note, "src": ev.get("file") or "",
+                       "rel": ev.get("rel") or result.get("file") or "",
+                       "result": result}, ensure_ascii=False)
+
+
+class WatchLog:
+    """监听事件日志：既喂给实时（SSE）看，又落盘按小时滚动保留。
+
+    设计要点：
+
+    - **只认时间戳裁剪**：日志是 JSONL，追加写；每次追加后按保留窗口把过期的行丢掉重写。
+      事件量小（一次处理一两行），重写的开销可忽略。
+    - **原始行保留**：不仅存渲染好的文本，也存 `result` 字段，前端可以重新格式化 / 换语言。
+    - **不保留开关**：`hours <= 0` 时内存里也不留（SSE 实时流照推，只是服务端不存储）。
+    - 线程安全：`append` 可能来自 watcher 线程，`tail`/`clear` 来自 HTTP 线程。
+    """
+
+    def __init__(self, hours: float = DEFAULT_LOG_HOURS,
+                 path: Path | None = None, cap: int = 2000):
+        self._lock = threading.Lock()
+        self._path = Path(path) if path else log_path()
+        self._hours = max(0.0, float(hours))
+        self._cap = max(1, int(cap))
+        self._events: list[dict] = []
+        self._load()
+
+    # ------------------------------------------------------------ 基础
+    @property
+    def hours(self) -> float:
+        return self._hours
+
+    def reconfigure(self, hours: float) -> None:
+        with self._lock:
+            self._hours = max(0.0, float(hours))
+            self._prune_locked(time.time())
+
+    def _cutoff(self, now: float) -> float:
+        # hours <= 0 视为「不留任何记录」：cutoff 放到无穷远，所有记录都过期。
+        # 前端仍能通过 SSE 实时看到事件，只是服务端不保留。
+        if self._hours <= 0:
+            return float("inf")
+        return now - self._hours * 3600.0
+
+    def _load(self) -> None:
+        if not self._path.is_file():
+            return
+        out: list[dict] = []
+        try:
+            for line in self._path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(rec, dict) and "ts" in rec:
+                    out.append(rec)
+        except OSError:
+            return
+        now = time.time()
+        cut = self._cutoff(now)
+        out = [r for r in out if float(r.get("ts", 0)) >= cut]
+        with self._lock:
+            self._events = out[-self._cap:]
+
+    def _prune_locked(self, now: float) -> None:
+        cut = self._cutoff(now)
+        self._events = [r for r in self._events if float(r.get("ts", 0)) >= cut]
+        if len(self._events) > self._cap:
+            self._events = self._events[-self._cap:]
+
+    def _flush_locked(self) -> None:
+        """把内存里的记录整个重写到磁盘（原子替换）。"""
+        if self._hours <= 0:
+            return
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = str(self._path) + ".tmp"
+            text = "\n".join(json.dumps(r, ensure_ascii=False) for r in self._events)
+            Path(tmp).write_text(text + ("\n" if text else ""), encoding="utf-8")
+            os.replace(tmp, self._path)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------ 读写
+    def append(self, ev: dict) -> dict:
+        """收一条 SSE 事件 → 转成日志记录 → 入内存 + 落盘。返回该记录。"""
+        try:
+            rec = json.loads(_log_line(ev))
+        except Exception:
+            return {}
+        now = time.time()
+        with self._lock:
+            self._events.append(rec)
+            self._prune_locked(now)
+            self._flush_locked()
+        return rec
+
+    def tail(self, limit: int = 500) -> list[dict]:
+        """取最近的若干条（默认 500，最多 cap）。"""
+        n = max(1, min(int(limit), self._cap))
+        with self._lock:
+            return list(self._events[-n:])
+
+    def clear(self) -> None:
+        with self._lock:
+            self._events = []
+            self._flush_locked()
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._events)
 
 
 def has_temp_suffix(name: str) -> bool:

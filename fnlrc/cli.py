@@ -176,7 +176,13 @@ def cmd_watch(a) -> int:
         print(t("cli.watch.dry_run"))
     print(t("cli.watch.hint"), flush=True)
 
+    # 日志同样落盘（默认保留 48 小时），与服务端共用一份 watch-log.jsonl
+    wlog = watcher.WatchLog(hours=watcher.log_retention_hours(
+        store.load_config() if not dry else {"watch_log_hours": 0}))
+
     def on_event(ev):
+        if not dry:
+            wlog.append(ev)
         if ev.get("event") == "done":
             r = ev.get("result") or {}
             moved = r.get("moved_to") or r.get("copied_to")

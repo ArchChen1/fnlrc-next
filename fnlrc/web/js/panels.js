@@ -53,11 +53,17 @@ export function initPanels() {  $("#openSettings").addEventListener("click", ope
   $("#fnosApply").addEventListener("click", fnosApply);
   $("#watchSave").addEventListener("click", saveWatch);
   $("#watchToggle").addEventListener("click", toggleWatch);
-  $("#watchLogClear").addEventListener("click", () => {
+  $("#watchLogClear").addEventListener("click", async () => {
     const log = $("#watchLog");
     if (log) log.textContent = "";
     syncWatchLogEmpty();
+    try { await api("/api/watch/log/clear", {}); }
+    catch (e) { toast(e.message); }
   });
+  const hoursEl = $("#watchLogHours");
+  if (hoursEl) {
+    hoursEl.addEventListener("change", saveWatchLogHours);
+  }
 
   buildLangPicker();
   initSettingsNav();
@@ -223,7 +229,7 @@ function initSettingsNav() {
       b.setAttribute("aria-current", String(b.dataset.pane === pane)));
     $$("#setPanes .setPane").forEach(s => { s.hidden = s.dataset.pane !== pane; });
     panes.scrollTop = 0;
-    if (pane === "watchlog") syncWatchLogEmpty();
+    if (pane === "watchlog") { syncWatchLogEmpty(); loadWatchLog(); }
   };
 
   nav.addEventListener("click", e => {
@@ -248,6 +254,7 @@ async function openSettings() {
   try {
     S.config = await api("/api/config");
     applyConfig(S.config);
+    loadWatchLog();     // 顺便把落盘的历史日志拉回来
   } catch (e) {
     toast(t("settings.read_failed", { err: e.message }));
   }
@@ -351,8 +358,8 @@ async function toggleWatch() {
 }
 
 /* SSE：把监听事件追加到日志框。断线后浏览器会自动重连。
-   日志只活在内存里（最多 200 行）：服务端不保存监听历史，刷新页面就没了 ——
-   这一点在「监听日志」页上直接写给用户看，免得以为是日志丢了。 */
+   日志同时由服务端落盘（默认保留 48 小时，见 watcher.WatchLog）—— 关掉面板、
+   重启服务后再打开，会先拉回历史记录（loadWatchLog），所以这里不再"刷新就没了"。 */
 let watchSrc = null;
 function openWatchStream() {
   if (!S.token || watchSrc) return;
@@ -361,19 +368,78 @@ function openWatchStream() {
   watchSrc.onmessage = ev => {
     let d;
     try { d = JSON.parse(ev.data); } catch { return; }
-    const log = $("#watchLog");
-    if (!log) return;
-    const r = d.result || {};
-    const name = d.rel || r.file || (d.file || "").split(/[\\/]/).pop();
-    const mark = d.event === "processing" ? t("settings.watch_processing")
-               : (r.status ? (STATUS_LABEL[r.status] || r.status) : d.event || t("settings.watch_done"));
-    const note = r.note ? `  (${r.note})` : "";
-    const line = `[${new Date().toLocaleTimeString()}] ${name} → ${mark}${note}`;
-    log.textContent = (log.textContent + "\n" + line).trim().split("\n").slice(-200).join("\n");
-    log.scrollTop = log.scrollHeight;
-    syncWatchLogEmpty();
+    appendWatchLine(sseToWatchRec(d));
   };
   watchSrc.onerror = () => { /* 静默重连；服务停了会一直重试 */ };
+}
+
+/** SSE 事件 → 与服务端落盘记录同形的对象（便于共用同一套渲染）。 */
+function sseToWatchRec(ev) {
+  const r = ev.result || {};
+  const name = ev.rel || r.file || (ev.file || "").split(/[\\/]/).pop();
+  return { ts: Date.now() / 1000, event: ev.event || "", status: r.status || "",
+           name, note: r.note || "" };
+}
+
+/** 把一条记录渲染成日志文本行。 */
+function watchLineText(rec) {
+  const mark = rec.event === "processing" ? t("settings.watch_processing")
+             : (rec.status ? (STATUS_LABEL[rec.status] || rec.status)
+                           : rec.event || t("settings.watch_done"));
+  const note = rec.note ? `  (${rec.note})` : "";
+  return `[${fmtLogTime(rec.ts)}] ${rec.name || ""} → ${mark}${note}`;
+}
+
+function fmtLogTime(ts) {
+  const d = new Date((ts || 0) * 1000);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? d.toLocaleTimeString() : d.toLocaleString();
+}
+
+function appendWatchLine(rec) {
+  const log = $("#watchLog");
+  if (!log) return;
+  log.textContent = (log.textContent + "\n" + watchLineText(rec)).trim()
+    .split("\n").slice(-500).join("\n");
+  log.scrollTop = log.scrollHeight;
+  syncWatchLogEmpty();
+}
+
+/** 拉回服务端落盘的历史日志（打开面板 / 切到「监听日志」时调用）。 */
+async function loadWatchLog() {
+  if (!S.token) return;
+  try {
+    const d = await api("/api/watch/log?limit=500");
+    const log = $("#watchLog");
+    if (!log) return;
+    const lines = (d.events || []).map(watchLineText);
+    if (lines.length) {
+      log.textContent = lines.join("\n");
+      log.scrollTop = log.scrollHeight;
+    }
+    syncWatchLogEmpty();
+    // 回填保留时长设置（只在表单还空着时填，避免盖掉用户正在输入的值）
+    const hours = $("#watchLogHours");
+    if (hours && document.activeElement !== hours) hours.value = d.hours;
+  } catch (e) { /* 读不到历史不影响实时流 */ }
+}
+
+/** 保留时长改动即保存（这一个字段独立于「监听」页的保存按钮）。 */
+async function saveWatchLogHours() {
+  const el = $("#watchLogHours");
+  if (!el) return;
+  const raw = el.value.trim();
+  const hours = raw === "" ? 48 : Number(raw);
+  if (!Number.isFinite(hours) || hours < 0) {
+    toast(t("settings.watch_log_keep_bad"));
+    return;
+  }
+  try {
+    S.config = await api("/api/config", { watch_log_hours: hours });
+    toast(t("settings.saved"));
+  } catch (e) {
+    toast(t("settings.save_failed", { err: e.message }));
+  }
 }
 
 /** 日志为空时显示提示行，有内容就藏起来。 */

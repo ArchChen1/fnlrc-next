@@ -22,6 +22,8 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("FNLRC_DATA", str(tmp_path))
     monkeypatch.delenv("FNLRC_REMOTE_API_KEY", raising=False)
     from fnlrc import server
+    # 监听日志是按数据目录懒加载的单例；换目录后必须重建，否则会写到上一个用例的目录
+    server._watch_log = None
     return server
 
 
@@ -668,6 +670,58 @@ def _wait(cond, timeout=5.0, interval=0.1):
             return True
         _t.sleep(interval)
     return False
+
+
+# ---------------------------------------------------------------- 监听日志接口（M6.6）
+def test_监听日志默认空且保留时长48小时(client):
+    d = client.get("/api/watch/log").json()
+    assert d["events"] == []
+    assert d["hours"] == 48
+    assert d["retention_s"] == 48 * 3600
+
+
+def test_监听事件会落盘并在接口里读回(isolated, client, tmp_path):
+    """走 _watch_build 拿真实的 on_event 接线，喂一条事件验证落盘 + 读回。"""
+    from fnlrc import watcher as W
+
+    root = tmp_path / "inbox"
+    root.mkdir()
+    store.save_config({"watch_root": str(root), "watch_write": False})
+
+    _w, _stop, _wc = server_mod._watch_build(store.load_config())
+    # on_event 是 _watch_build 内部闭包，直接找 watcher 上挂着的那个
+    ev = {"type": "watch", "event": "done", "file": str(root / "a.flac"),
+          "rel": "a.flac", "result": {"status": "written", "file": "a.flac",
+                                      "note": "ok"}}
+    _w.on_event(ev)
+
+    d = client.get("/api/watch/log").json()
+    assert len(d["events"]) == 1
+    rec = d["events"][0]
+    assert rec["name"] == "a.flac"
+    assert rec["status"] == "written"
+    # 确实写了文件
+    assert (tmp_path / "watch-log.jsonl").is_file()
+
+
+def test_清空监听日志需要令牌(client, auth, isolated):
+    assert client.post("/api/watch/log/clear").status_code == 401
+    # 先塞一条
+    server_mod.get_watch_log().append(
+        {"event": "done", "rel": "a.flac", "result": {"status": "written"}})
+    assert client.get("/api/watch/log").json()["count"] == 1
+    assert client.post("/api/watch/log/clear", headers=auth).status_code == 200
+    assert client.get("/api/watch/log").json()["count"] == 0
+
+
+def test_改保留时长立刻作用到日志单例(client, auth, isolated):
+    """保留时长改完要立刻作用到正在跑的日志对象，而不是等重启。"""
+    lg = server_mod.get_watch_log()
+    assert lg.hours == 48
+    r = client.post("/api/config", headers=auth, json={"watch_log_hours": 24})
+    assert r.status_code == 200
+    assert r.json()["watch"]["watch_log_hours"] == 24
+    assert lg.hours == 24, "应该把新窗口推给运行中的单例"
 
 
 # ---------------------------------------------------------------- 人工翻译接口（M3）

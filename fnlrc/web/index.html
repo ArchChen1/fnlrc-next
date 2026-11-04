@@ -395,12 +395,19 @@
 
         <section class="setPane" data-pane="watchlog" hidden>
           <h3 class="setPaneTitle" data-i18n="settings.watch_log_section">监听日志</h3>
-          <div class="row" style="margin-top:1rem;justify-content:space-between">
+          <div class="row" style="margin-top:1rem;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
             <span class="small" id="watchLogHint" data-i18n="settings.watch_log_hint">
-              只显示这一次打开面板之后的事件。服务端不保存历史。
+              记录已落盘，关掉面板、重启服务后仍可回看。
             </span>
             <button class="btn btn-outline" id="watchLogClear" type="button" data-i18n="settings.watch_log_clear">清空</button>
           </div>
+          <label class="field" style="max-width:22rem;margin-top:.8rem">
+            <span data-i18n="settings.watch_log_keep">保留时长（小时）</span>
+            <input type="number" id="watchLogHours" min="0" step="1" placeholder="48">
+          </label>
+          <p class="small" style="margin:.4rem 0 .8rem" data-i18n="settings.watch_log_keep_hint">
+            默认 48 小时（两天）。填 0 表示不保存，只显示本次打开面板之后的事件。
+          </p>
           <pre class="prebox watchlog" id="watchLog"></pre>
           <p class="small" id="watchLogEmpty" data-i18n="settings.watch_log_empty" style="margin:.6rem 0 0">
             还没有事件。监听每处理一首歌会在这里追加一行。

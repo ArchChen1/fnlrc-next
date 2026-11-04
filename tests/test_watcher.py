@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -356,3 +357,81 @@ def test_after非法值回退keep(tmp_path):
     w = W.FolderWatcher(roots=[str(tmp_path)], cfg=wcfg(), after="bogus",
                         state_path_override=str(tmp_path / "s.json"))
     assert w.after == "keep"
+
+
+# ---------------------------------------------------------------- 监听日志落盘（M6.6）
+def test_日志默认保留48小时(tmp_path, monkeypatch):
+    from fnlrc import store
+    monkeypatch.setenv("FNLRC_DATA", str(tmp_path))
+    assert store.watch_config()["watch_log_hours"] == 48
+    assert W.DEFAULT_LOG_HOURS == 48
+    assert W.log_retention_hours() == 48
+
+
+def test_日志追加后能读回并落盘(tmp_path):
+    p = tmp_path / "watch-log.jsonl"
+    lg = W.WatchLog(hours=48, path=p)
+    lg.append({"event": "done", "rel": "a.flac",
+               "result": {"status": "written", "file": "a.flac", "note": "ok"}})
+    lg.append({"event": "processing", "rel": "b.flac", "result": {}})
+    assert lg.count() == 2
+    assert p.is_file()
+    tails = lg.tail()
+    assert tails[-1]["name"] == "b.flac"
+    assert tails[-2]["status"] == "written"
+    assert tails[-2]["note"] == "ok"
+
+
+def test_日志重启后能从磁盘恢复(tmp_path):
+    p = tmp_path / "watch-log.jsonl"
+    lg = W.WatchLog(hours=48, path=p)
+    lg.append({"event": "done", "rel": "x.flac", "result": {"status": "written"}})
+    # 新实例（模拟进程重启）读同一份文件
+    lg2 = W.WatchLog(hours=48, path=p)
+    assert lg2.count() == 1
+    assert lg2.tail()[0]["name"] == "x.flac"
+
+
+def test_日志超期被裁掉(tmp_path):
+    p = tmp_path / "watch-log.jsonl"
+    lg = W.WatchLog(hours=48, path=p)
+    # 手工塞一条 49 小时前的记录
+    old = {"ts": time.time() - 49 * 3600, "event": "done", "name": "old.flac"}
+    p.write_text(json.dumps(old, ensure_ascii=False) + "\n", encoding="utf-8")
+    lg2 = W.WatchLog(hours=48, path=p)   # 加载时即按窗口裁剪
+    assert lg2.count() == 0
+
+
+def test_日志保留0小时不保存(tmp_path):
+    p = tmp_path / "watch-log.jsonl"
+    lg = W.WatchLog(hours=0, path=p)
+    lg.append({"event": "done", "rel": "a.flac", "result": {}})
+    assert lg.count() == 0          # 服务端不保留
+    assert not p.exists()           # 也不落盘
+
+
+def test_日志reconfigure裁掉超出窗口的行(tmp_path):
+    p = tmp_path / "watch-log.jsonl"
+    lg = W.WatchLog(hours=48, path=p)
+    lg.append({"event": "done", "rel": "a.flac", "result": {}})
+    assert lg.count() == 1
+    # 保留窗口改成 0 → 现有记录都超期
+    lg.reconfigure(0)
+    assert lg.count() == 0
+
+
+def test_日志清空(tmp_path):
+    lg = W.WatchLog(hours=48, path=tmp_path / "watch-log.jsonl")
+    lg.append({"event": "done", "rel": "a.flac", "result": {}})
+    lg.clear()
+    assert lg.count() == 0
+    assert lg.tail() == []
+
+
+def test_日志tail受cap限制(tmp_path):
+    lg = W.WatchLog(hours=48, path=tmp_path / "watch-log.jsonl", cap=5)
+    for i in range(12):
+        lg.append({"event": "done", "rel": f"{i}.flac", "result": {}})
+    assert lg.count() == 5
+    assert [r["name"] for r in lg.tail()] == ["7.flac", "8.flac", "9.flac",
+                                              "10.flac", "11.flac"]

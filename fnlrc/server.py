@@ -51,6 +51,22 @@ _jobs_lock = threading.Lock()
 _watch: dict = {"thread": None, "stop": None, "watcher": None, "events": None}
 _watch_lock = threading.Lock()
 
+# 监听事件日志（M6.6）：把 SSE 事件同时落盘，默认保留 48 小时。
+# 懒加载 —— 构造时要读配置、碰文件系统，放模块顶层会在 import 阶段就动盘。
+_watch_log = None
+_watch_log_lock = threading.Lock()
+
+
+def get_watch_log():
+    """取监听日志单例（首次调用时按配置里的保留时长构造）。"""
+    global _watch_log
+    if _watch_log is None:
+        from . import watcher as W
+        with _watch_log_lock:
+            if _watch_log is None:
+                _watch_log = W.WatchLog(hours=W.log_retention_hours())
+    return _watch_log
+
 
 # ---------------------------------------------------------------- 安全
 def _is_loopback(host: str | None) -> bool:
@@ -189,6 +205,13 @@ def set_config(request: Request, payload: dict = Body(...),
     if patch.get("remote_base_url"):
         patch["remote_base_url"] = P.redact_url(patch["remote_base_url"])
     store.save_config(patch)
+    # 保留时长改了 → 立刻作用到正在跑的日志单例（顺便裁掉超出窗口的旧行）
+    if "watch_log_hours" in patch:
+        try:
+            from . import watcher as W
+            get_watch_log().reconfigure(W.log_retention_hours())
+        except Exception:
+            pass
     return get_config()
 
 
@@ -575,9 +598,15 @@ def _watch_build(cfg: dict):
     stop = threading.Event()
 
     def on_event(ev):
+        # ① 实时（SSE）—— 面板开着时逐条推
         q = _watch.get("events")
         if q is not None:
             q.put(ev)
+        # ② 落盘（M6.6）—— 关掉面板 / 重启服务后仍能回看
+        try:
+            get_watch_log().append(ev)
+        except Exception as e:
+            print(f"监听日志写入失败：{P.mask_secret(str(e))}", file=sys.stderr)
 
     def on_result(res):
         # 攒进历史报告 —— 监听处理过的歌也要能在「历史任务」里看到
@@ -693,6 +722,21 @@ def watch_events(token: str | None = Query(default=None)):
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/watch/log")
+def watch_log(limit: int = Query(default=500)):
+    """读回落的监听日志（最近的在后）。关掉面板 / 重启服务后仍可回看。"""
+    lg = get_watch_log()
+    return {"events": lg.tail(limit), "count": lg.count(),
+            "hours": lg.hours, "retention_s": int(lg.hours * 3600)}
+
+
+@app.post("/api/watch/log/clear")
+def watch_log_clear(request: Request, x_fnlrc_token: str | None = Header(default=None)):
+    require_token(request, x_fnlrc_token)
+    get_watch_log().clear()
+    return {"ok": True, "count": 0}
 
 
 # ---------------------------------------------------------------- 目录浏览

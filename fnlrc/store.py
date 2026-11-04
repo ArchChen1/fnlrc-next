@@ -50,6 +50,7 @@ CONFIG_KEYS = (
     "watch_quiet_s",       # 落盘静默期
     "watch_poll_s",        # 轮询间隔
     "watch_autostart",     # 服务启动时是否自动开监听
+    "watch_log_hours",     # 监听日志保留时长（小时）；<=0 = 不落盘
     # 歌词源插件（M2）
     "providers_enabled",   # 白名单：非空时只启用列出的源
     "providers_disabled",  # 黑名单：优先级高于白名单
@@ -205,6 +206,8 @@ WATCH_DEFAULTS = {
     "watch_quiet_s": 8,
     "watch_poll_s": 5,
     "watch_autostart": False,
+    # 监听日志保留时长（小时）。默认 48（两天）；<=0 = 不落盘，只在面板里看实时。
+    "watch_log_hours": 48,
 }
 
 
@@ -226,6 +229,10 @@ def watch_config(cfg: dict | None = None) -> dict:
         out["watch_poll_s"] = float(out["watch_poll_s"])
     except (TypeError, ValueError):
         out["watch_poll_s"] = WATCH_DEFAULTS["watch_poll_s"]
+    try:
+        out["watch_log_hours"] = float(out["watch_log_hours"])
+    except (TypeError, ValueError):
+        out["watch_log_hours"] = WATCH_DEFAULTS["watch_log_hours"]
     return out
 
 
