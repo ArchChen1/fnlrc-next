@@ -34,10 +34,12 @@ echo.
 echo Done: dist\fnlrc.exe
 echo Please double-click it once on a machine without Python to verify.
 endlocal
+pause
 exit /b 0
 
 :err
 echo.
 echo Build failed, exit code %errorlevel%
 endlocal
+pause
 exit /b 1
