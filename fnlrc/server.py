@@ -232,7 +232,7 @@ def test_remote(request: Request, payload: dict = Body(...),
 @app.get("/api/probe/ollama")
 def probe_ollama_deprecated():
     """Ollama 本地翻译后端已移除。保留这条路由只为让旧前端拿到明确的 410 而不是 404。"""
-    raise HTTPException(410, "本地模型（Ollama）后端已移除，请改用「源站译词」或「我的 API」")
+    raise HTTPException(410, "本地模型（Ollama）后端已移除，请改用「源站译词」或「AI 翻译」")
 
 
 # ---------------------------------------------------------------- 扫描 / 预览

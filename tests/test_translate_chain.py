@@ -41,7 +41,7 @@ def test_源站排在第一位时不再调远端(stub_remote):
 
 
 def test_远端排在第一位就先走远端(stub_remote):
-    """把「我的 API」拖到最上面，等于不管源站给没给都先问 AI。"""
+    """把「AI 翻译」拖到最上面，等于不管源站给没给都先问 AI。"""
     out, backend = pl._translate_chain(["a", "b"], _cfg(["remote", "source"]))
     assert backend == "remote"
     assert out == ["AI1", "AI2"]

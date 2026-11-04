@@ -39,8 +39,8 @@ STRINGS = {
     # ── 翻译后端 ──────────────────────────────────────────
     "backend.source": "源站译词",
     "backend.source.hint": "默认。只用网易云自带的中文译词，不调任何后端、完全不出网；源站没有译词就写单语。",
-    "backend.remote": "我的 API",
-    "backend.remote.hint": "用自己的 DeepSeek key 补翻源站没给译文的那些行。会把歌词文本发出去。",
+    "backend.remote": "AI 翻译",
+    "backend.remote.hint": "用自己配的 OpenAI 兼容端点补翻源站没给译文的那些行。会把歌词文本发出去。",
     "backend.none": "不翻译",
     "backend.none.hint": "只修格式与乱码，不生成译文。",
 

@@ -326,7 +326,7 @@
     <div class="setBody">
       <nav class="setNav" id="setNav" aria-label="设置分类">
         <button class="setNavItem" type="button" data-pane="lang" aria-current="true" data-i18n="settings.language">界面语言</button>
-        <button class="setNavItem" type="button" data-pane="api" data-i18n="settings.api_section">我的 API</button>
+        <button class="setNavItem" type="button" data-pane="api" data-i18n="settings.api_section">AI 翻译</button>
         <button class="setNavItem" type="button" data-pane="library" data-i18n="settings.library_section">音乐库</button>
         <button class="setNavItem" type="button" data-pane="watch" data-i18n="settings.watch_section">监听</button>
         <button class="setNavItem" type="button" data-pane="watchlog" data-i18n="settings.watch_log_section">监听日志</button>
@@ -345,7 +345,7 @@
         </section>
 
         <section class="setPane" data-pane="api" hidden>
-          <h3 class="setPaneTitle" data-i18n="settings.api_section">我的 API · DeepSeek</h3>
+          <h3 class="setPaneTitle" data-i18n="settings.api_section">AI 翻译</h3>
           <p class="note" id="keyState" style="margin:.8rem 0 1.2rem"></p>
           <label class="field"><span data-i18n="settings.api_key">API Key</span>
             <input type="password" id="cfgKey" placeholder="sk-…" autocomplete="off"></label>
@@ -458,6 +458,36 @@
         </section>
 
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI 翻译设置（补完页勾选「AI 翻译」但还没配置好时弹出） -->
+<div class="overlay" id="aiCfg">
+  <div class="sheet aiCfgSheet" id="aiCfgSheet" role="dialog" aria-modal="true" aria-labelledby="aiCfgTitle">
+    <h2 id="aiCfgTitle" data-i18n="aitrans.title">AI 翻译设置</h2>
+    <p class="note" style="margin:.6rem 0 1.2rem" data-i18n="aitrans.intro">
+      还没有配置好可用的 AI 端点。填上 API Key 后再勾选即可启用 AI 翻译。
+    </p>
+    <p class="note" id="aiCfgState" style="margin:0 0 1.2rem"></p>
+    <label class="field"><span data-i18n="settings.api_key">API Key</span>
+      <input type="password" id="aiCfgKey" placeholder="sk-…" autocomplete="off"></label>
+    <div class="grid g2">
+      <label class="field"><span data-i18n="settings.base_url">Base URL</span>
+        <input type="text" id="aiCfgBase" placeholder="https://api.deepseek.com"></label>
+      <label class="field"><span data-i18n="settings.model">模型名</span>
+        <input type="text" id="aiCfgModel" placeholder="deepseek-flash"></label>
+    </div>
+    <div class="row">
+      <button class="btn btn-outline" id="aiCfgTest" type="button" data-i18n="settings.test">测试连接</button>
+      <span class="small" id="aiCfgTestResult"></span>
+    </div>
+    <p class="note" style="margin-top:1rem" data-i18n-html="settings.api_note">
+      只有源站没给译文的行会发出去翻译；选「源站译词」完全不出网。
+    </p>
+    <div class="row" style="margin-top:1.5rem">
+      <button class="btn btn-primary" id="aiCfgSave" type="button" data-i18n="aitrans.save">保存并启用</button>
+      <button class="btn btn-outline" id="aiCfgCancel" type="button" data-i18n="common.cancel">取消</button>
     </div>
   </div>
 </div>

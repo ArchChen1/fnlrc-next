@@ -266,9 +266,10 @@ label.checkline{gap:.55rem;margin-bottom:.9rem;font-size:.9375rem;cursor:pointer
 .pill.dim{color:rgba(255,255,255,.55)}
 .pill:hover{border-color:#fff}
 
-/* 表格：桌面在内部滚动容器里限量；手机改整页滚动（见 <768px 断点） */
-.scroller{max-height:34rem;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
-          overscroll-behavior:contain}
+/* 表格：桌面在内部滚动容器里限量；手机改整页滚动（见 <768px 断点）。
+   overscroll-behavior 用 auto（默认）而不是 contain —— 表格滚到底后继续滚，
+   应该把滚动交给整页（.panels），而不是卡在原地。 */
+.scroller{max-height:34rem;overflow-y:auto;border:1px solid var(--line);border-radius:1rem}
 table{width:100%;border-collapse:collapse;font-size:.875rem}
 th{position:sticky;top:0;z-index:2;background:#000;text-align:left;font-weight:600;
    font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;
@@ -292,8 +293,7 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 .bar>i{display:block;height:100%;background:#fff;width:0;transition:width .45s var(--ease)}
 
 .log{max-height:30vh;overflow-y:auto;border:1px solid var(--line);border-radius:1rem;
-     padding:1rem 1.15rem;font-family:var(--mono);font-size:.8125rem;line-height:1.75;
-     overscroll-behavior:contain}
+     padding:1rem 1.15rem;font-family:var(--mono);font-size:.8125rem;line-height:1.75}
 .log div{white-space:pre-wrap;word-break:break-word}
 .log .ok{color:var(--ok)}.log .warn{color:var(--warn)}
 .log .bad{color:var(--bad)}.log .dim{color:rgba(255,255,255,.45)}
@@ -422,6 +422,8 @@ td.path{max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowra
 
 /* ── 首次使用引导（欢迎 → 令牌 → 选库）──────────────────────── */
 .sheet.wiz{max-width:36rem}
+/* AI 翻译设置弹窗：比默认设置弹层窄一点，字段紧凑 */
+.sheet.aiCfgSheet{max-width:32rem}
 .wizdots{display:flex;gap:.6rem;margin-top:1rem;flex-wrap:wrap}
 .wizdot{font-size:.75rem;letter-spacing:.04em;padding:.3rem .8rem;border-radius:var(--radius-full);
         border:1px solid var(--line);color:rgba(255,255,255,.5)}

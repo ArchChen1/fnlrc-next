@@ -106,7 +106,7 @@ docker logs fnlrc 2>&1 | grep -i token
 printf 'FNLRC_REMOTE_API_KEY=sk-xxxx
 ' > fnlrc.env
 docker run ... --env-file fnlrc.env ...
-# 或者在网页版「设置 → 我的 API」里填 Base URL / 模型名 / Key
+# 或者在网页版「设置 → AI 翻译」里填 Base URL / 模型名 / Key
 ```
 
 用的是 OpenAI 兼容协议，所以 DeepSeek 之外，自建的 vLLM / one-api / LM Studio
@@ -203,7 +203,7 @@ cd /opt/fnlrc && .venv/bin/python -m fnlrc watch \
 | 写文件失败 permission denied | 容器用户对目录无写权限 | 调 `user:`/目录属主，或用「设置 → 测试写入权限」 |
 | 监听不处理新文件 | 文件还在下载（大小在变）/ 目录填错 / 静默期未过 | 看设置里的实时日志；临时后缀（`.part` 等）本就忽略 |
 | 监听把文件搬走了想找回来 | `--after move` 是移动 | 从目标目录搬回；已写入的歌词不会丢（撞名时旧的留成 `.bak`） |
-| 大量 `no_lyrics` | 文件名词脏 / 冷门曲 / 外网不通 | 检查能否访问 lrclib.net；换「我的 API」补翻 |
+| 大量 `no_lyrics` | 文件名词脏 / 冷门曲 / 外网不通 | 检查能否访问 lrclib.net；换「AI 翻译」补翻 |
 | 大量 `timeout` | 网络慢或被限流 | 调大单曲超时、调大节流间隔 |
 | 写完飞牛没变化 | **这是正常的**：飞牛只在歌曲首次入库时读一次旁挂 `.lrc`，已入库的路径不会再解析 | 新歌先补完再入库；已入库的歌见 [FNOS-SIDECAR.md](FNOS-SIDECAR.md)（三条出路，各有代价） |
 | 已入库的歌想立即生效 | 需要让飞牛重新解析该曲 | 只能删库重扫（所有 `guid` 会变，歌单/收藏/历史失效），或改它的歌词库并保留 `lyric_id`（要碰另一个应用的 DB）|

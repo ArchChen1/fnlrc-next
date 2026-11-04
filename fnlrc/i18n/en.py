@@ -47,10 +47,10 @@ STRINGS = {
         "calls no backend and sends nothing outbound; writes single-language "
         "lyrics when the source has no translation."
     ),
-    "backend.remote": "My API",
+    "backend.remote": "AI translation",
     "backend.remote.hint": (
-        "Uses your own DeepSeek key to translate the lines the source did not "
-        "provide. Sends lyric text outbound."
+        "Uses your own OpenAI-compatible endpoint to translate the lines the source "
+        "did not provide. Sends lyric text outbound."
     ),
     "backend.none": "No translation",
     "backend.none.hint": "Only fixes formatting and mojibake, generates no translation.",

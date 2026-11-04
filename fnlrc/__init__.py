@@ -6,7 +6,7 @@
 
     lrc.py        文本层：LRC 解析 / 规整 / 双语合成 / 飞牛双行规则校验
     library.py    文件层：扫描 / 标签 / 编码嗅探 / 纯音乐判定 / 库统计
-    providers/    外部层：歌词源（网易云 · LRCLIB · 插件）+ OpenAI 兼容远端（DeepSeek）
+    providers/    外部层：歌词源（网易云 · LRCLIB · 插件）+ 用户自配的 OpenAI 兼容远端
     pipeline.py   编排层：单曲决策 + 批量执行（三端唯一入口）
     fnos.py       飞牛集成：只读探测它的歌词库（回填待做）
     store.py      持久层：任务/结果/回滚

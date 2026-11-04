@@ -94,7 +94,7 @@ def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = Non
                      log=None) -> tuple[list[str] | None, str]:
     """按用户排序的降级链补齐译文（M6）。
 
-    顺序完全由用户决定：把「我的 API」拖到第一位，就等于「不管源站给没给，都先问 AI」。
+    顺序完全由用户决定：把「AI 翻译」拖到第一位，就等于「不管源站给没给，都先问 AI」。
     每一环只处理**前面没补上的那些行**，补上了就退出。
 
     `source` 是「源站译词」这一环 —— 它表示"到此为止，用源站已有的译文"，不是一次调用。
@@ -153,7 +153,7 @@ def _translate_missing(lines: list[str], cfg: Config, deadline: float | None = N
     |---|---|
     | `source`（默认） | **不调任何后端**。源站没给译词就写单语 —— 零配置、零成本、零出网 |
     | `none` | 同 source，且明确表示不翻译 |
-    | `remote` | 调用户自己配的 DeepSeek 端点 |
+    | `remote` | 调用户自己配的 OpenAI 兼容端点（DeepSeek / OpenAI / 本地模型等） |
 
     只翻**缺译文的那几行**：源站译词优先，它来自人工/字幕组，质量比机器翻译好。
 

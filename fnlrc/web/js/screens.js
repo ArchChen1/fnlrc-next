@@ -9,6 +9,7 @@ import { t } from "./i18n/index.js";
 import { openFsBrowser } from "./fsbrowser.js";
 import { openManual, canEdit } from "./manual.js";
 import { persistEnabled } from "./dashboard.js";
+import { openAiConfig } from "./aicfg.js";
 
 const TAB_KEY = "fnlrc_tab";
 const TAB_COUNT = 5;
@@ -417,6 +418,12 @@ export function renderBackends() {
 
   // 勾选：只有勾上的项参与降级（至少留一个）
   $$(".chainEnable", box).forEach(cb => cb.addEventListener("change", () => {
+    const backend = cb.closest(".chainRow")?.dataset.backend;
+    // 勾选「AI 翻译」但服务端还没有可用配置 → 弹设置框，保存后再自动勾上
+    if (backend === "remote" && cb.checked && !(S.config && S.config.remote_configured)) {
+      promptAiConfig(cb);
+      return;
+    }
     const enabled = enabledOrder();
     if (!enabled.length) { cb.checked = true; toast(t("backend.need_one")); return; }
     S.translateOrder = enabled;
@@ -430,6 +437,20 @@ export function renderBackends() {
   // 原生拖拽
   bindDrag(box);
   updateChainHint();
+}
+
+/** 勾选「AI 翻译」却没配置好 → 弹设置框；保存成功才真的勾上，取消则退回去。 */
+async function promptAiConfig(cb) {
+  const ok = await openAiConfig();
+  if (ok) {
+    // 配置好之后重新走一遍勾选逻辑（此时 remote_configured 已为真，不会再弹）
+    cb.checked = false;
+    cb.checked = true;
+    cb.dispatchEvent(new Event("change"));
+  } else {
+    cb.checked = false;
+    toast(t("aitrans.cancel_hint"));
+  }
 }
 
 /** 当前链里被勾选（启用）的部分 */
