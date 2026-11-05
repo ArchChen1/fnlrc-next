@@ -91,20 +91,24 @@ def decide(song: lib.Song, cfg: Config) -> dict:
 
 # ------------------------------------------------------------------ 翻译后端
 def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = None,
-                     log=None) -> tuple[list[str] | None, str]:
+                     log=None, *, title: str = "", artist: str = "",
+                     context: str = "") -> tuple[list[str] | None, str]:
     """按用户排序的降级链补齐译文（M6）。
 
     顺序完全由用户决定：把「AI 翻译」拖到第一位，就等于「不管源站给没给，都先问 AI」。
     每一环只处理**前面没补上的那些行**，补上了就退出。
 
-    `source` 是「源站译词」这一环 —— 它表示"到此为止，用源站已有的译文"，不是一次调用。
-    所以它出现在任何位置时都只是终止点，后面的后端不再被尝试。
+    `source` 是「源站译词」这一环 —— 它不产生新译文（源站已有的译词早就写进 pairs 了，
+    调用方只把**缺译文的行**传进来）。所以它是一段"已经试过源站"的记录，**不是终止点**：
+    排在它后面的后端（通常是 AI）仍要处理这些还缺译文的行，否则源站没给译文的歌
+    就只能整首写成单语、让用户换个后端再跑一次。
 
     全部走完仍有缺口时：返回已补齐的部分（可能含空串），调用方按空串当单语处理。
     """
     order = [b for b in (cfg.translate_order or []) if b in ("source", "remote")]
     if not order:
-        return _translate_missing(lines, cfg, deadline=deadline, log=log)
+        return _translate_missing(lines, cfg, deadline=deadline, log=log,
+                                  title=title, artist=artist, context=context)
     if not lines:
         return [], "none"
 
@@ -116,9 +120,11 @@ def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = Non
         if not remaining:
             break
         if backend == "source":
-            # 源站译词已经写在 pairs 里了，这一环不产生新译文，只结束尝试。
+            # 源站译词已经写在 pairs 里了，这一环不产生新译文。**不能 break**：
+            # 否则排在 source 后面的后端永远轮不到，源站没给译文的行就补不上。
+            # 想"只用源站、绝不联网"，把 AI 那一项取消勾选即可（UI 的复选框）。
             used.append("source")
-            break
+            continue
         if backend == "remote":
             if not (cfg.remote_base_url and cfg.remote_model):
                 if log:
@@ -126,7 +132,8 @@ def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = Non
                 continue
             got, _ = _translate_missing([lines[i] for i in remaining],
                                         Config(**{**cfg.__dict__, "translate": "remote"}),
-                                        deadline=deadline, log=log)
+                                        deadline=deadline, log=log,
+                                        title=title, artist=artist, context=context)
             if not got:
                 continue
             used.append("remote")
@@ -146,7 +153,8 @@ def _translate_chain(lines: list[str], cfg: Config, deadline: float | None = Non
 
 
 def _translate_missing(lines: list[str], cfg: Config, deadline: float | None = None,
-                       log=None) -> tuple[list[str] | None, str]:
+                       log=None, *, title: str = "", artist: str = "",
+                       context: str = "") -> tuple[list[str] | None, str]:
     """补齐源站没给出译文的那些行。→ (与输入等长的译文列表 或 None, 后端串)。
 
     | 配置 | 行为 |
@@ -170,7 +178,8 @@ def _translate_missing(lines: list[str], cfg: Config, deadline: float | None = N
 
     out, err = P.remote_translate(lines, cfg.remote_base_url, cfg.remote_api_key,
                                   cfg.remote_model, timeout=cfg.remote_timeout,
-                                  deadline=deadline)
+                                  deadline=deadline, title=title, artist=artist,
+                                  context=context)
     if not out:
         if log:
             log(f"   远端翻译不可用：{err}")
@@ -297,13 +306,19 @@ def process_song(song: lib.Song, cfg: Config, log=None) -> dict:
         missing = [i for i, (_, _, t, _) in enumerate(pairs) if not t]
         if missing:
             lines = [pairs[i][1] for i in missing]
+            # 整首原文按顺序拼成上下文一起发过去：只补缺译文的那几行，
+            # 但让模型看到完整歌词。否则跨行的句子（上一行以 but/and 结尾）
+            # 会被切成半句来翻，读起来断头断尾。
+            context = "\n".join(o for _, o, _, _ in pairs)
             say(f"   翻译 {len(lines)} 行（后端 {cfg.translate}）")
             if cfg.translate_order:
                 trans, backend = _translate_chain(
-                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say)
+                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say,
+                    title=song.title, artist=song.artist, context=context)
             else:
                 trans, backend = _translate_missing(
-                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say)
+                    lines, cfg, deadline=time.time() + cfg.translate_deadline_s, log=say,
+                    title=song.title, artist=song.artist, context=context)
             res["backend"] = backend
             if trans is not None:
                 for k, i in enumerate(missing):
@@ -403,8 +418,6 @@ def should_skip_existing(song: lib.Song, cfg: Config) -> str | None:
     """已处理的文件直接跳过，返回原因。"""
     if cfg.force or not song.has_lrc:
         return None
-    if not cfg.write:
-        return None       # 预览模式不跳过，便于看判定
     if lib.is_broken_lrc(song.lrc_path):
         return None
     try:

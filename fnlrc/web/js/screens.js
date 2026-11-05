@@ -99,7 +99,9 @@ export function applyMode() {
   if (S.config && Array.isArray(S.config.translate_order) && S.config.translate_order.length) {
     S.translateOrder = S.config.translate_order.slice();
   } else if (!S.translateOrder) {
-    S.translateOrder = ["source", "remote"];
+    // 默认只用「源站译词」：这是产品的隐私默认（完全不联网）。
+    // 「AI 翻译」是显式选择 —— 用户没主动勾选过，就不该被塞进链里。
+    S.translateOrder = ["source"];
   }
 
   $$(".tab").forEach(el => {
@@ -133,6 +135,9 @@ export function applyMode() {
   // 自动模式没有「进度 / 报告」Tab，别停在那两个上面
   if (auto && S.tab >= AUTO_TABS) go(0);
   syncTabLocks();
+  // 配置可能在进入流程之后才读到 —— 重画一次，让「AI 翻译」的勾选态
+  // 反映服务器上到底配没配好端点（见 renderBackends 的说明）。
+  renderBackends();
 }
 
 /**
@@ -288,6 +293,8 @@ async function restoreRoot() {
     input.value = last;
     localStorage.setItem("fnlrc_root", last);
   }
+  // 这份配置可能包含「AI 翻译」是否配好 —— 重新画一次链，让勾选态正确
+  renderBackends();
 }
 
 function browse() {
@@ -365,11 +372,11 @@ export function initPreview() {
   syncPreviewToggle();
 }
 
-/** 当前降级链（有序）。空 = 还没配过，用默认值 */
+/** 当前降级链（有序）。空 = 还没配过 → 默认只用「源站译词」（不联网）。 */
 export function currentOrder() {
   return S.translateOrder && S.translateOrder.length
     ? S.translateOrder.slice()
-    : ["source", "remote"];
+    : ["source"];
 }
 
 /** 兼容旧接口：链里的第一项当作「主后端」 */
@@ -389,10 +396,25 @@ export function currentBackend() {
 export function renderBackends() {
   const box = $("#backendPick");
   if (!box) return;
-  const order = currentOrder();
   const all = backends();          // [[v, label, hint], ...]
   const labelOf = Object.fromEntries(all.map(([v, l]) => [v, l]));
   const hintOf = Object.fromEntries(all.map(([v, , h]) => [v, h]));
+
+  const enabled = currentOrder();  // 已启用的后端（有序）
+  // 「AI 翻译」只有在服务端确实配好端点（`remote_configured`）时才算真正启用。
+  // 否则即使它出现在默认链里，也画成**未勾选** —— 没配 key 却默认勾上会误导用户
+  // （以为在翻译，其实后端会静默跳过）。配置未知时按"没配"处理，这是安全的一侧。
+  const configured = !!(S.config && S.config.remote_configured);
+  const isOn = v => enabled.includes(v) && (v !== "remote" || configured);
+  // 排序按**实际启用**的那几项来：没配好的 remote 即使写在链里，也当作未启用，
+  // 沉到列表后面（否则会出现「它排第一却没勾」的错位观感）。
+  const effEnabled = enabled.filter(isOn);
+
+  // **始终把每个后端都画出来**：启用的排在前面并保持用户顺序，没启用的排在后面。
+  // 若只画启用项，用户取消勾选后那一行就消失、再也点不回来（旧版就是这样）。
+  const ids = all.map(b => b[0]);
+  const shown = [...effEnabled.filter(v => ids.includes(v)),
+                 ...ids.filter(v => !effEnabled.includes(v))];
 
   box.className = "chain";
   box.innerHTML = `
@@ -400,17 +422,17 @@ export function renderBackends() {
       从上往下依次尝试。排在前面的先用，补不上的行再交给下一个。
     </p>
     <ol class="chainList" id="chainList">
-      ${order.map((v, i) => `
+      ${shown.map((v, i) => `
         <li class="chainRow" draggable="true" data-backend="${esc(v)}" data-idx="${i}">
           <span class="chainGrip" aria-hidden="true">⋮⋮</span>
           <label class="chainCheck">
-            <input type="checkbox" class="chainEnable" checked>
+            <input type="checkbox" class="chainEnable" ${isOn(v) ? "checked" : ""}>
             <span class="chainLabel">${esc(labelOf[v] || v)}</span>
           </label>
           <span class="chainHint">${esc(hintOf[v] || "")}</span>
           <span class="chainMove">
             <button class="btn-ghost chainUp" type="button" title="上移" ${i === 0 ? "disabled" : ""}>↑</button>
-            <button class="btn-ghost chainDown" type="button" title="下移" ${i === order.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="btn-ghost chainDown" type="button" title="下移" ${i === shown.length - 1 ? "disabled" : ""}>↓</button>
           </span>
         </li>`).join("")}
     </ol>

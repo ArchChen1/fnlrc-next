@@ -679,18 +679,44 @@ def _remaining(deadline: float | None, default: float, floor: float = 5.0) -> fl
     return max(floor, min(default, deadline - time.time()))
 
 
-BATCH_PROMPT = """你是专业的歌词翻译。把下面每一行歌词翻译成简体中文。
-
+BATCH_PROMPT = """你是专业的歌词翻译，把下面每一行歌词翻译成简体中文。
+{title}{artist}{glossary}
 规则：
-1. 输入有多少行，输出就必须有多少行，编号一一对应，不要合并或拆分。
-2. 不要省略、不要补充、不要输出任何解释或原文。
-3. 译文要符合歌词的语气，通顺自然，人名/专有名词保持常见译法。
-4. 如果某行是语气词或拟声词，给出最自然的中文表达。
-
-只输出 "编号|译文" 格式的行。
-
-输入：
+1. 先把整段当成连贯的歌词语境来理解，再逐行输出。输入有多少行，输出就必须有多少行，编号一一对应，不要合并或拆分。
+2. 连续几行可能是同一句话（比如上一行以 but / and / that 结尾，下一行接着说）：请按整句理解，再把译文拆回对应的每一行，保证每行都有内容、句意连贯。
+3. 只输出 "编号|译文"，不要输出原文、解释或任何多余的内容。
+4. 不要增译：译文里不能出现原文没有的词句。宁可简短，也不许自己加戏。
+5. 拟声词、语气词、无实义的重复（Uh、uh huh、na na、yeah、oh 等）保留原文或音译，不要硬翻成中文。
+6. 译文要符合歌词语气：口语、自然、简短，尽量能唱。人名/专有名词用常见译法。
+{hook_rule}{context}输入：
 {body}"""
+
+
+def build_prompt(body: str, *, title: str = "", artist: str = "",
+                 glossary: str | dict[str, str] | None = None,
+                 context: str = "") -> str:
+    """把 `BATCH_PROMPT` 里的占位符填上再发给模型。
+
+    `{title}` / `{artist}` / `{glossary}` / `{context}` 都**缺省留空** —— 不给
+    任何元数据时，就是一段纯规则提示词，与旧版行为一致，老调用方不受影响。
+    """
+    if isinstance(glossary, dict):
+        glossary = "；".join(f"{k} → {v}" for k, v in glossary.items())
+    title_line = f"歌曲：{title}\n" if title else ""
+    artist_line = f"艺人：{artist}\n" if artist else ""
+    glossary_line = f"术语表：{glossary}\n" if glossary else ""
+    # 歌名 hook 规则只在知道歌名时才给 —— 副歌反复喊的那个词往往就是歌名的
+    # 音译/谐音（APT. 的韩文写法 아파트 就是典型），直译会变成"公寓"这种怪结果。
+    hook_rule = (
+        f"7. 如果某一行是歌名的音译、谐音、罗马音或意译（副歌反复喊出的那个词往往"
+        f"就是歌名本身），请直接采用歌名「{title}」的写法，不要按字面意译。\n"
+    ) if title else ""
+    context_block = (
+        "整首歌的完整歌词如下，仅供你理解语境；要翻译的只是最后的输入：\n"
+        + context + "\n\n") if context else ""
+    return BATCH_PROMPT.format(title=title_line, artist=artist_line,
+                               glossary=glossary_line, hook_rule=hook_rule,
+                               context=context_block, body=body)
 
 
 def _parse_numbered(text: str) -> dict[int, str]:
@@ -762,8 +788,10 @@ def _remote_error(r) -> tuple[str, bool]:
 
 def remote_translate(lines: list[str], base_url: str, api_key: str, model: str,
                      chunk: int = 30, timeout: int = 60, deadline: float | None = None,
-                     max_tokens: int = 4096,
-                     debug=False) -> tuple[dict[int, str], str | None]:
+                     max_tokens: int = 4096, debug=False,
+                     *, title: str = "", artist: str = "",
+                     glossary: str | dict[str, str] | None = None,
+                     context: str = "") -> tuple[dict[int, str], str | None]:
     """用任意 OpenAI 兼容端点翻译（DeepSeek 等）。
 
     → ({行号(1-based): 译文}, 错误说明或 None)。只要有任何一块成功，错误就是 None。
@@ -788,8 +816,10 @@ def remote_translate(lines: list[str], base_url: str, api_key: str, model: str,
             break
         part = lines[start:start + chunk]
         body = "\n".join(f"{i+1}|{t}" for i, t in enumerate(part))
+        prompt = build_prompt(body, title=title, artist=artist,
+                              glossary=glossary, context=context)
         payload = {"model": model,
-                   "messages": [{"role": "user", "content": BATCH_PROMPT.format(body=body)}],
+                   "messages": [{"role": "user", "content": prompt}],
                    "temperature": 0.1, "stream": False, "max_tokens": max_tokens}
         block_err: tuple[str, bool] | None = None
         for attempt in range(3):
